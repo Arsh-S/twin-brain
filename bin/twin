@@ -1,0 +1,326 @@
+#!/usr/bin/env bash
+# twin - personal second-brain CLI (Karpathy LLM-wiki pattern, Claude Code engine)
+# Runs entirely on the logged-in Claude Code (Max subscription). No API tokens.
+set -euo pipefail
+
+# --- resolve TWIN_DIR (follow symlink to the real script, fall back to ~/twin) ---
+src="${BASH_SOURCE[0]}"
+while [ -L "$src" ]; do
+  dir="$(cd -P "$(dirname "$src")" && pwd)"
+  src="$(readlink "$src")"; [[ "$src" != /* ]] && src="$dir/$src"
+done
+SELF="$(cd -P "$(dirname "$src")" && pwd)"
+TWIN_DIR="${TWIN_DIR:-$(cd "$SELF/.." && pwd)}"
+[ -d "$TWIN_DIR/wiki" ] || TWIN_DIR="$HOME/twin"
+RAW="$TWIN_DIR/raw-sources"
+INBOX="$RAW/inbox"
+WIKI="$TWIN_DIR/wiki"
+SKILLS="$TWIN_DIR/skills"
+CONFIG="$TWIN_DIR/config"
+REPORTS="$TWIN_DIR/reports"
+LOG="$TWIN_DIR/log.md"
+REGISTRY="$CONFIG/projects.json"
+
+CLAUDE_BIN="${CLAUDE_BIN:-claude}"
+AGENT_TOOLS="Bash,Read,Write,Edit,Glob,Grep"
+RESEARCH_TOOLS="Bash,Read,Write,Edit,Glob,Grep,WebSearch,WebFetch"
+CHEAP_MODEL="${TWIN_CHEAP_MODEL:-haiku}"   # mechanical work runs on a cheap model to save quota
+RESEARCH_CAP="${TWIN_RESEARCH_CAP:-3}"     # max web-research gaps filled per run
+
+ts()      { date "+%Y-%m-%d %H:%M:%S"; }
+day()     { date "+%Y-%m-%d"; }
+stamp()   { date "+%Y-%m-%d-%H%M%S"; }
+rnd()     { printf "%04x" $((RANDOM % 65536)); }
+logline() { printf '\n## [%s] %s\n' "$(ts)" "$1" >> "$LOG"; }
+die()     { echo "twin: $*" >&2; exit 1; }
+
+# run a Claude Code agent headless, in the twin dir, using a skill prompt file
+# run_agent <skill_file> [extra] [model] [tools]
+run_agent() {
+  local skill_file="$1"
+  local extra="${2:-}"
+  local model="${3:-}"
+  local tools="${4:-$AGENT_TOOLS}"
+  [ -f "$skill_file" ] || die "missing skill file: $skill_file"
+  local prompt
+  prompt="$(cat "$skill_file")"
+  if [ -n "$extra" ]; then
+    prompt="$prompt
+
+---
+# This run
+
+$extra"
+  fi
+  local model_arg=()
+  [ -n "$model" ] && model_arg=(--model "$model")
+  ( cd "$TWIN_DIR" && "$CLAUDE_BIN" -p "$prompt" \
+      --allowedTools "$tools" \
+      ${model_arg[@]+"${model_arg[@]}"} \
+      --permission-mode acceptEdits 2>&1 )
+}
+
+# is the wiki dirty (uncommitted changes under wiki/)? used as a delta guard.
+wiki_dirty() { [ -n "$(cd "$TWIN_DIR" && git status --porcelain wiki/ 2>/dev/null)" ]; }
+
+# --- registry helpers (python3, no jq dependency) ---
+reg_get() { # path -> tracked|private|unknown
+  python3 - "$REGISTRY" "$1" <<'PY'
+import json,sys,os
+reg,path=sys.argv[1],os.path.abspath(sys.argv[2])
+try: d=json.load(open(reg))
+except Exception: d={}
+print(d.get(path,{}).get("status","unknown") if isinstance(d.get(path),dict) else d.get(path,"unknown"))
+PY
+}
+reg_set() { # path status
+  python3 - "$REGISTRY" "$1" "$2" <<'PY'
+import json,sys,os
+reg,path,status=sys.argv[1],os.path.abspath(sys.argv[2]),sys.argv[3]
+try: d=json.load(open(reg))
+except Exception: d={}
+d[path]={"status":status,"name":os.path.basename(path),"updated":__import__("datetime").datetime.now().isoformat(timespec="seconds")}
+json.dump(d,open(reg,"w"),indent=2)
+print(f"{status}: {path}")
+PY
+}
+
+cmd_capture() {
+  local text="" source="cli" project="" mode="arg"
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --file) mode="file"; text="$2"; shift 2;;
+      --stdin) mode="stdin"; shift;;
+      --source) source="$2"; shift 2;;
+      --project) project="$2"; shift 2;;
+      *) text="$1"; shift;;
+    esac
+  done
+  local body
+  case "$mode" in
+    file)  body="$(cat "$text")"; source="${source:-file:$text}";;
+    stdin) body="$(cat)";;
+    *)     body="$text";;
+  esac
+  [ -n "$body" ] || die "nothing to capture"
+  local f="$INBOX/$(stamp)-$(rnd).md"
+  {
+    echo "---"
+    echo "captured: $(ts)"
+    echo "source: $source"
+    [ -n "$project" ] && echo "project: $project"
+    echo "status: unprocessed"
+    echo "---"
+    echo
+    echo "$body"
+  } > "$f"
+  logline "capture | source=$source${project:+ project=$project} -> ${f#$TWIN_DIR/}"
+  echo "captured -> ${f#$TWIN_DIR/}"
+}
+
+cmd_ingest() {
+  local pending
+  pending="$( { find "$INBOX" -name '*.md' -type f; find "$RAW/chats" -name '*.md' -type f; } 2>/dev/null | sort || true)"
+  local extra
+  if [ "${1:-}" = "--all" ] || [ -z "${1:-}" ]; then
+    if [ -z "$pending" ]; then echo "twin: nothing to ingest (inbox + chats empty)"; return 0; fi
+    extra="Unprocessed sources in raw-sources/inbox/ and raw-sources/chats/ (a chat file has a
+companion .transcript.jsonl; read it for the session content). Process each, then move it to
+raw-sources/processed/ after summarizing:
+$pending"
+  else
+    extra="Process this specific source: $1"
+  fi
+  logline "ingest started"
+  run_agent "$SKILLS/ingest.md" "$extra"
+  logline "ingest finished"
+}
+
+cmd_ask() {
+  [ $# -gt 0 ] || die "usage: twin ask \"question\""
+  run_agent "$SKILLS/ask.md" "Question: $*"
+}
+
+cmd_clip() { # fetch a web page as clean markdown (defuddle) into the inbox
+  [ $# -gt 0 ] || die "usage: twin clip URL"
+  local url="$1"
+  command -v defuddle >/dev/null 2>&1 || die "defuddle not installed (npm i -g defuddle)"
+  local title body f
+  title="$(defuddle parse "$url" -p title 2>/dev/null || echo "$url")"
+  body="$(defuddle parse "$url" --md 2>/dev/null)"
+  [ -n "$body" ] || die "could not extract content from $url"
+  f="$INBOX/$(stamp)-$(rnd).md"
+  {
+    echo "---"; echo "captured: $(ts)"; echo "source: web:$url"
+    echo "title: $title"; echo "status: unprocessed"; echo "---"; echo
+    echo "# $title"; echo; echo "$body"
+  } > "$f"
+  logline "clip | $title <- $url -> ${f#$TWIN_DIR/}"
+  echo "clipped: $title -> ${f#$TWIN_DIR/}"
+}
+
+cmd_lint() {
+  logline "lint started"
+  run_agent "$SKILLS/lint.md" "Write findings to reports/lint-report.md. Auto-fix safe issues; only flag destructive ones."
+  logline "lint finished"
+}
+
+cmd_tidy() { # cheap mechanical clean + sort (runs on the cheap model)
+  logline "tidy started ($CHEAP_MODEL)"
+  run_agent "$SKILLS/tidy.md" "Touch only what changed since the last commit (use git status/diff). Be fast and mechanical; no deep reasoning, no web." "$CHEAP_MODEL"
+  logline "tidy finished"
+}
+
+cmd_research() { # capped web-research gap-fill (smart model + web tools)
+  local n="${1:-$RESEARCH_CAP}"
+  logline "research started (cap $n)"
+  run_agent "$SKILLS/research.md" "Fill AT MOST $n highest-value gaps from reports/lint-report.md. Hard cap: $n. Log each gap filled. If none worth filling, do nothing." "" "$RESEARCH_TOOLS"
+  logline "research finished"
+}
+
+cmd_chat() { # ingest a session transcript (used by SessionEnd hook). arg: transcript path
+  local tp="${1:-}"; local cwd="${2:-}"
+  [ -f "$tp" ] || die "transcript not found: $tp"
+  local f="$RAW/chats/$(stamp)-$(rnd).md"
+  {
+    echo "---"
+    echo "captured: $(ts)"
+    echo "source: chat-session"
+    echo "cwd: $cwd"
+    echo "transcript: $tp"
+    echo "status: unprocessed"
+    echo "---"
+  } > "$f"
+  cp "$tp" "${f%.md}.transcript.jsonl" 2>/dev/null || true
+  logline "chat captured | cwd=$cwd -> ${f#$TWIN_DIR/}"
+  echo "chat captured -> ${f#$TWIN_DIR/}"
+}
+
+cmd_track()   { reg_set "${1:-$PWD}" tracked; }
+cmd_private() { reg_set "${1:-$PWD}" private; }
+cmd_check()   { reg_get "${1:-$PWD}"; }
+cmd_projects() { cat "$REGISTRY" 2>/dev/null || echo "{}"; }
+
+cmd_search() {
+  [ $# -gt 0 ] || die "usage: twin search \"query\""
+  if command -v qmd >/dev/null 2>&1; then
+    qmd search "$WIKI" "$*"
+  else
+    grep -rin --include='*.md' "$*" "$WIKI" || echo "no matches (install qmd for semantic search)"
+  fi
+}
+
+# secret scan before commit; returns nonzero if likely secret found
+secret_scan() {
+  local hits
+  hits="$(grep -rInE \
+    '(sk-[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{36}|xox[baprs]-[A-Za-z0-9-]{10,}|-----BEGIN [A-Z ]*PRIVATE KEY-----|AIza[0-9A-Za-z_-]{35})' \
+    "$TWIN_DIR" --exclude-dir=.git 2>/dev/null || true)"
+  if [ -n "$hits" ]; then
+    echo "twin: POSSIBLE SECRETS DETECTED, aborting sync:" >&2
+    echo "$hits" | head -20 >&2
+    return 1
+  fi
+  return 0
+}
+
+cmd_sync() {
+  local msg="twin: sync $(ts)"
+  [ "${1:-}" = "-m" ] && { msg="$2"; }
+  cd "$TWIN_DIR"
+  secret_scan || die "fix secrets before syncing"
+  git add -A
+  if git diff --cached --quiet; then echo "twin: nothing to sync"; return 0; fi
+  git commit -q -m "$msg"
+  if git remote get-url origin >/dev/null 2>&1; then
+    git push -q && echo "twin: pushed"
+  else
+    echo "twin: committed (no remote configured)"
+  fi
+}
+
+cmd_nightly() { # cheap: ingest new, tidy ONLY if something changed, sync. near-zero on quiet days.
+  logline "nightly run started"
+  cmd_ingest --all || true
+  if wiki_dirty; then
+    cmd_tidy || true
+  else
+    echo "twin: no wiki changes tonight, skipping tidy (saves quota)"
+    logline "nightly | nothing new, tidy skipped"
+  fi
+  cmd_sync -m "twin: nightly $(day)" || true
+  logline "nightly run finished"
+}
+
+cmd_weekly() { # deep: ingest, reconcile/health lint, capped web research, sort, sync.
+  logline "weekly run started"
+  cmd_ingest --all || true
+  cmd_lint || true
+  cmd_research "$RESEARCH_CAP" || true
+  cmd_tidy || true
+  cmd_sync -m "twin: weekly $(day)" || true
+  logline "weekly run finished"
+}
+
+cmd_status() {
+  echo "twin @ $TWIN_DIR"
+  echo "  inbox unprocessed : $(find "$INBOX" -name '*.md' 2>/dev/null | wc -l | tr -d ' ')"
+  echo "  chats unprocessed : $(find "$RAW/chats" -name '*.md' 2>/dev/null | wc -l | tr -d ' ')"
+  echo "  wiki pages        : $(find "$WIKI" -name '*.md' 2>/dev/null | wc -l | tr -d ' ')"
+  echo "  tracked projects  : $(python3 -c "import json;d=json.load(open('$REGISTRY'));print(sum(1 for v in d.values() if (v.get('status') if isinstance(v,dict) else v)=='tracked'))" 2>/dev/null || echo 0)"
+  echo "  last log entries  :"
+  grep "^## \[" "$LOG" 2>/dev/null | tail -3 | sed 's/^/    /' || true
+}
+
+usage() {
+  cat <<'EOF'
+twin - your second brain (system: twin, instance: <your vault>)
+
+  twin capture "text"              quick-capture a thought to the inbox
+  twin capture --file PATH         capture a file's contents
+  echo x | twin capture --stdin    capture from a pipe
+      [--source LABEL] [--project NAME]
+  twin ingest [--all|PATH]         compile inbox sources into the wiki (Claude)
+  twin ask "question"              query the wiki with citations (Claude)
+  twin clip URL                    fetch a web page as clean markdown (defuddle)
+  twin search "query"              keyword/semantic search the wiki
+  twin lint                        deep health-check + reconcile + auto-clean (smart model)
+  twin tidy                        cheap mechanical clean + sort into MOCs (Haiku)
+  twin research [N]                fill up to N web-research gaps (default 3, capped)
+  twin chat TRANSCRIPT [CWD]       capture a session transcript (hook)
+  twin track [PATH]                mark a project as tracked in the brain
+  twin private [PATH]              mark a project as private (never captured)
+  twin check [PATH]                print tracked|private|unknown for a path
+  twin projects                    show the project registry
+  twin sync [-m MSG]               secret-scan, commit, push to your git remote
+  twin nightly                     ingest + (conditional) tidy + sync  [cheap, scheduled]
+  twin weekly                      ingest + lint + research + tidy + sync  [deep, scheduled]
+  twin status                      show brain stats
+EOF
+}
+
+main() {
+  local cmd="${1:-status}"; shift || true
+  case "$cmd" in
+    capture)  cmd_capture "$@";;
+    ingest)   cmd_ingest "$@";;
+    ask)      cmd_ask "$@";;
+    clip)     cmd_clip "$@";;
+    search)   cmd_search "$@";;
+    lint)     cmd_lint "$@";;
+    tidy)     cmd_tidy "$@";;
+    research) cmd_research "$@";;
+    chat)     cmd_chat "$@";;
+    track)    cmd_track "$@";;
+    private)  cmd_private "$@";;
+    check)    cmd_check "$@";;
+    projects) cmd_projects "$@";;
+    sync)     cmd_sync "$@";;
+    nightly)  cmd_nightly "$@";;
+    weekly)   cmd_weekly "$@";;
+    status)   cmd_status "$@";;
+    help|-h|--help) usage;;
+    *) usage; die "unknown command: $cmd";;
+  esac
+}
+main "$@"
