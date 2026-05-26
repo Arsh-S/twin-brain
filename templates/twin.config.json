@@ -1,0 +1,17 @@
+{
+  "name": "twin",
+  "system": "twin",
+  "engine": "claude-code",
+  "schedule": {
+    "nightly": "02:30  (ingest + conditional tidy + sync)",
+    "weekly": "Sun 03:00  (ingest + lint + research + tidy + sync)"
+  },
+  "models": { "smart": "account-default", "cheap": "haiku" },
+  "budget": { "research_gaps_per_week": 3, "nightly_skips_when_unchanged": true },
+  "domains": ["projects", "learning", "personal", "concepts", "people"],
+  "capture": {
+    "from_projects": "opt-in",
+    "from_chats": true,
+    "ask_when_new_and_important": true
+  }
+}
