@@ -14,6 +14,8 @@ external database).
   - `inbox/` quick captures, `chats/` captured sessions, `projects/<name>/` per-project dumps.
 - `wiki/` - you OWN this entirely. Compiled, interlinked knowledge. The user reads, you write.
   - `people/ concepts/ projects/ personal/ learning/`, `maps/` (MOCs), plus `index.md`.
+- `generated/` - one-off AI outputs (drafts, briefings, comparisons). NOT knowledge; never
+  hand-edited; dated `YYYY-MM-DD-<topic>.md`. Keep these OUT of `wiki/` so knowledge stays curated.
 - `CLAUDE.md` (this file) + `skills/` - the conventions and workflows.
 
 Two special files:

@@ -30,7 +30,7 @@ command -v python3 >/dev/null 2>&1 || { echo "ERROR: python3 not found." >&2; ex
 
 # --- 2. vault scaffold ---
 say "Creating vault at $TWIN_DIR"
-mkdir -p "$TWIN_DIR"/{bin,config,skills,reports,docs} \
+mkdir -p "$TWIN_DIR"/{bin,config,skills,reports,docs,generated} \
          "$TWIN_DIR"/raw-sources/{inbox,chats,projects,processed} \
          "$TWIN_DIR"/wiki/{people,concepts,projects,personal,learning,maps}
 

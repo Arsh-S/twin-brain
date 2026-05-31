@@ -26,9 +26,12 @@ This output is read in a terminal, NOT in a markdown renderer. So:
   clickable). If you reference a specific section, mention it in the prose, not on the path line.
 - If there were zero matches, print `Sources: (none — gap in the wiki)`.
 
-## Optional: file good answers back
-If the answer is a durable artifact worth keeping (a comparison, synthesis, briefing, a newly
-discovered connection), offer to save it as a new wiki page so the exploration compounds. Only
-write if it clearly adds lasting value; otherwise just answer.
+## Optional: save the output
+Two homes, pick the right one:
+- **Durable knowledge** (a synthesis, a discovered connection, a fact worth recalling later) ->
+  offer to save as a `wiki/` page so it compounds and joins the graph.
+- **One-off artifact** (a drafted email, a comparison table, a briefing you asked for once) ->
+  save to `generated/<YYYY-MM-DD>-<topic>.md`, NOT the wiki. These are outputs, not knowledge.
+Only save when it clearly has value; otherwise just answer.
 
 Keep it tight. Lead with the answer, then supporting detail, then citations.
