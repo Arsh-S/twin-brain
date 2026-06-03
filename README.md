@@ -55,6 +55,8 @@ twin ask "what do I know about X?"     # cited answer
 twin tidy                              # cheap clean + sort into MOCs
 twin lint                              # deep reconcile + health audit
 twin research 3                        # fill up to 3 web-research gaps
+twin remind "call the dentist"         # create an Apple Reminder (macOS)
+twin agenda                            # briefing: calendar + reminders + priorities -> generated/
 twin status
 ```
 
@@ -81,6 +83,18 @@ twin is built to stay cheap: the nightly job spends ~0 tokens on days nothing ch
 mechanical passes run on the cheap model, web research is hard-capped (default 3/week), and agents
 work on git deltas instead of re-reading the whole vault. Tune with `TWIN_CHEAP_MODEL` and
 `TWIN_RESEARCH_CAP`.
+
+## Life-OS layer (optional, macOS)
+
+twin can act on the world, not just remember it:
+- `twin remind "..."` writes to **Apple Reminders** (local, via `osascript` — grant Reminders
+  access on first run).
+- `twin agenda` builds a daily briefing from your **calendar** (any calendar MCP you've configured,
+  e.g. [google-calendar-mcp](https://github.com/nspady/google-calendar-mcp)) + open reminders +
+  your `profile.md` priorities, saved to `generated/`.
+- `ingest` turns clear action items in your notes into reminders automatically.
+
+These are optional. Calendar features need a calendar MCP configured; reminders need macOS.
 
 ## Privacy
 

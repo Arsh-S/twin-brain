@@ -24,8 +24,11 @@ REGISTRY="$CONFIG/projects.json"
 CLAUDE_BIN="${CLAUDE_BIN:-claude}"
 AGENT_TOOLS="Bash,Read,Write,Edit,Glob,Grep"
 RESEARCH_TOOLS="Bash,Read,Write,Edit,Glob,Grep,WebSearch,WebFetch"
+# agenda reads a calendar via an MCP if you have one configured (default: google-calendar MCP).
+AGENDA_TOOLS="Bash,Read,Write,Edit,Glob,Grep,mcp__google-calendar__list-events,mcp__google-calendar__list-calendars,mcp__google-calendar__get-current-time,mcp__google-calendar__create-event"
 CHEAP_MODEL="${TWIN_CHEAP_MODEL:-haiku}"   # mechanical work runs on a cheap model to save quota
 RESEARCH_CAP="${TWIN_RESEARCH_CAP:-3}"     # max web-research gaps filled per run
+REMINDER_LIST="${TWIN_REMINDER_LIST:-Reminders}"   # Apple Reminders list to write into (macOS)
 
 ts()      { date "+%Y-%m-%d %H:%M:%S"; }
 day()     { date "+%Y-%m-%d"; }
@@ -178,6 +181,34 @@ cmd_research() { # capped web-research gap-fill (smart model + web tools)
   logline "research finished"
 }
 
+cmd_remind() { # create an Apple Reminder (deterministic, no LLM). macOS only.
+  [ "$(uname)" = "Darwin" ] || die "twin remind needs macOS (Apple Reminders)"
+  local text="" due="" list="$REMINDER_LIST"
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --due)  due="$2"; shift 2;;
+      --list) list="$2"; shift 2;;
+      *) text="$1"; shift;;
+    esac
+  done
+  [ -n "$text" ] || die "usage: twin remind \"text\" [--due \"June 20, 2026 9:00 AM\"] [--list NAME]"
+  local etext="${text//\"/\\\"}" elist="${list//\"/\\\"}"
+  local props="name:\"$etext\", body:\"[twin]\""
+  [ -n "$due" ] && props="$props, remind me date:(date \"${due//\"/\\\"}\")"
+  osascript -e "tell application \"Reminders\"
+    if not (exists list \"$elist\") then make new list with properties {name:\"$elist\"}
+    tell list \"$elist\" to make new reminder with properties {$props}
+  end tell" >/dev/null 2>&1 \
+    && { logline "remind | $text${due:+ (due $due)} -> Reminders/$list"; echo "reminded: $text${due:+  (due $due)}"; } \
+    || die "could not create reminder (grant Reminders access: System Settings > Privacy > Reminders)"
+}
+
+cmd_agenda() { # read your calendar (MCP) + Apple Reminders + priorities -> briefing in generated/
+  logline "agenda started"
+  run_agent "$SKILLS/agenda.md" "Today is $(date '+%Y-%m-%d (%A)'). Build today's agenda briefing now." "" "$AGENDA_TOOLS"
+  logline "agenda finished"
+}
+
 cmd_chat() { # ingest a session transcript (used by SessionEnd hook). arg: transcript path
   local tp="${1:-}"; local cwd="${2:-}"
   [ -f "$tp" ] || die "transcript not found: $tp"
@@ -287,6 +318,8 @@ twin - your second brain (system: twin, instance: <your vault>)
   twin lint                        deep health-check + reconcile + auto-clean (smart model)
   twin tidy                        cheap mechanical clean + sort into MOCs (Haiku)
   twin research [N]                fill up to N web-research gaps (default 3, capped)
+  twin remind "text" [--due STR]   create an Apple Reminder (macOS)
+  twin agenda                      briefing: calendar + reminders + priorities -> generated/
   twin chat TRANSCRIPT [CWD]       capture a session transcript (hook)
   twin track [PATH]                mark a project as tracked in the brain
   twin private [PATH]              mark a project as private (never captured)
@@ -310,6 +343,8 @@ main() {
     lint)     cmd_lint "$@";;
     tidy)     cmd_tidy "$@";;
     research) cmd_research "$@";;
+    remind)   cmd_remind "$@";;
+    agenda)   cmd_agenda "$@";;
     chat)     cmd_chat "$@";;
     track)    cmd_track "$@";;
     private)  cmd_private "$@";;
