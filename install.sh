@@ -39,6 +39,7 @@ cp "$REPO/bin/twin" "$TWIN_DIR/bin/twin"; chmod +x "$TWIN_DIR/bin/twin"
 [ -f "$TWIN_DIR/CLAUDE.md" ] || cp "$REPO/templates/CLAUDE.md" "$TWIN_DIR/CLAUDE.md"
 [ -f "$TWIN_DIR/config/twin.config.json" ] || cp "$REPO/templates/twin.config.json" "$TWIN_DIR/config/twin.config.json"
 [ -f "$TWIN_DIR/config/projects.json" ] || echo '{}' > "$TWIN_DIR/config/projects.json"
+[ -f "$TWIN_DIR/wiki/personal/profile.md" ] || cp "$REPO/templates/profile.md" "$TWIN_DIR/wiki/personal/profile.md"
 
 if [ ! -f "$TWIN_DIR/wiki/index.md" ]; then
 cat > "$TWIN_DIR/wiki/index.md" <<'EOF'

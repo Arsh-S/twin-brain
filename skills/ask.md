@@ -4,7 +4,8 @@ You are answering a question using ONLY your twin wiki (`~/twin/wiki/`). You are
 Read `CLAUDE.md` for conventions.
 
 ## Procedure
-1. Read `wiki/index.md` first to locate relevant pages.
+0. Read `wiki/personal/profile.md` first for who the user is + current priorities (context).
+1. Read `wiki/index.md` to locate relevant pages.
 2. Use `twin search`, grep, or follow `[[wikilinks]]` to pull the right pages.
 3. Read those pages fully.
 4. Answer concisely and accurately.

@@ -19,6 +19,8 @@ external database).
 - `CLAUDE.md` (this file) + `skills/` - the conventions and workflows.
 
 Two special files:
+- `wiki/personal/profile.md` - who the user is + current priorities. Read it FIRST in every ingest /
+  ask / research so output is personalized and prioritized. Keep it current; don't bloat it.
 - `wiki/index.md` - catalog of every page, by category, each with a one-line summary. Read it
   FIRST when answering. Keep it current on every ingest/tidy.
 - `log.md` - append-only timeline. Entry format: `## [YYYY-MM-DD HH:MM:SS] <op> | <detail>`.
