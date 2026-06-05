@@ -180,26 +180,29 @@ cmd_research() { # capped web-research gap-fill (smart model + web tools)
   logline "research finished"
 }
 
-cmd_remind() { # create an Apple Reminder (deterministic, no LLM). macOS only.
+cmd_remind() { # Apple Reminders via EventKit (no app launch).
+  #   twin remind "text" [--due "June 20, 2026 9:00 AM"] [--list NAME]
+  #   twin remind done|edit|rm "match" [new title]
   [ "$(uname)" = "Darwin" ] || die "twin remind needs macOS (Apple Reminders)"
-  local text="" due="" list="$REMINDER_LIST"
-  while [ $# -gt 0 ]; do
-    case "$1" in
-      --due)  due="$2"; shift 2;;
-      --list) list="$2"; shift 2;;
-      *) text="$1"; shift;;
-    esac
-  done
-  [ -n "$text" ] || die "usage: twin remind \"text\" [--due \"June 20, 2026 9:00 AM\"] [--list NAME]"
-  local etext="${text//\"/\\\"}" elist="${list//\"/\\\"}"
-  local props="name:\"$etext\", body:\"[twin]\""
-  [ -n "$due" ] && props="$props, remind me date:(date \"${due//\"/\\\"}\")"
-  osascript -e "tell application \"Reminders\"
-    if not (exists list \"$elist\") then make new list with properties {name:\"$elist\"}
-    tell list \"$elist\" to make new reminder with properties {$props}
-  end tell" >/dev/null 2>&1 \
-    && { logline "remind | $text${due:+ (due $due)} -> Reminders/$list"; echo "reminded: $text${due:+  (due $due)}"; } \
-    || die "could not create reminder (grant Reminders access: System Settings > Privacy > Reminders)"
+  command -v swift >/dev/null 2>&1 || die "twin remind needs swift (Xcode Command Line Tools)"
+  local rem="$SELF/twin-rem.swift"
+  case "${1:-}" in
+    done)   shift; swift "$rem" done "${1:?match}"; logline "remind done | $1";;
+    edit)   shift; swift "$rem" edit "${1:?match}" "${2:?new title}"; logline "remind edit | $1 -> $2";;
+    rm|del|delete) shift; swift "$rem" delete "${1:?match}"; logline "remind rm | $1";;
+    *)
+      local text="" due="" list="$REMINDER_LIST"
+      while [ $# -gt 0 ]; do
+        case "$1" in
+          --due)  due="$2"; shift 2;;
+          --list) list="$2"; shift 2;;
+          *) text="$1"; shift;;
+        esac
+      done
+      [ -n "$text" ] || die "usage: twin remind \"text\" [--due \"June 20, 2026 9:00 AM\"] [--list NAME]"
+      swift "$rem" add "$text" "$due" "$list" && logline "remind | $text${due:+ (due $due)}"
+      ;;
+  esac
 }
 
 cmd_calendar() { # events from ALL Apple Calendar accounts via EventKit (no app launch). arg: span days (default 1)
@@ -210,7 +213,7 @@ cmd_calendar() { # events from ALL Apple Calendar accounts via EventKit (no app 
 
 cmd_reminders() { # open reminders via EventKit (no app launch); fall back to osascript if not permitted
   [ "$(uname)" = "Darwin" ] || die "twin reminders needs macOS"
-  if command -v swift >/dev/null 2>&1 && swift "$SELF/twin-rem.swift" 2>/dev/null; then
+  if command -v swift >/dev/null 2>&1 && swift "$SELF/twin-rem.swift" list 2>/dev/null; then
     return 0
   fi
   osascript -e 'tell application "Reminders" to return name of (reminders whose completed is false)' 2>/dev/null | tr ',' '\n'
