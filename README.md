@@ -60,6 +60,7 @@ twin remind done|edit|rm "match" [new title]                  # complete / edit 
 twin reminders                         # list open reminders (EventKit, no app launch)
 twin calendar [days]                   # events across ALL Apple Calendar accounts (EventKit)
 twin agenda                            # briefing: calendar + reminders + priorities -> generated/
+twin doctor                            # health check: deps, permissions, schedule, sync
 twin status
 ```
 
@@ -89,17 +90,17 @@ work on git deltas instead of re-reading the whole vault. Tune with `TWIN_CHEAP_
 
 ## Life-OS layer (optional, macOS)
 
-twin can act on the world, not just remember it:
-- `twin remind "..."` writes to **Apple Reminders** (local, via `osascript` — grant Reminders
-  access on first run).
-- `twin calendar` / `twin reminders` read **all your Apple Calendar accounts + Reminders** directly
-  via **EventKit** (no app launch, fast, every account you've added to macOS, no per-account OAuth).
-  First run needs a one-time Calendar/Reminders permission grant in System Settings → Privacy.
-- `twin agenda` builds a daily briefing from your calendar + open reminders + your `profile.md`
-  priorities, saved to `generated/`.
+twin can act on the world, not just remember it (all via **EventKit**, no app launch, all your
+macOS accounts, no per-account OAuth):
+- `twin remind "..."` / `twin remind done|edit|rm "match"` — create/complete/edit/delete **Apple
+  Reminders**.
+- `twin calendar [days]` / `twin reminders` — read events + open reminders across every account.
+- `twin agenda` — daily briefing: calendar + reminders + your `profile.md` priorities → `generated/`.
 - `ingest` turns clear action items in your notes into reminders automatically.
+- Calendar **writes** (optional) go through a calendar MCP to a single calendar you designate.
 
-These are optional. Calendar features need a calendar MCP configured; reminders need macOS.
+macOS only. First run prompts once for Calendar/Reminders permission (System Settings → Privacy);
+grant your terminal app. `twin doctor` verifies it all.
 
 ## Privacy
 

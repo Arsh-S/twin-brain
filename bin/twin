@@ -313,6 +313,47 @@ cmd_weekly() { # deep: ingest, reconcile/health lint, capped web research, sort,
   logline "weekly run finished"
 }
 
+cmd_doctor() { # health check: deps, permissions, schedule, hooks, sync
+  local ok="  \033[32m✓\033[0m" bad="  \033[31m✗\033[0m" warn="  \033[33m!\033[0m"
+  echo "twin doctor @ $TWIN_DIR"
+  echo
+  echo "Core"
+  command -v claude >/dev/null 2>&1 && printf "$ok claude CLI present ($(claude --version 2>/dev/null | head -1))\n" || printf "$bad claude CLI not found — twin's engine\n"
+  command -v twin   >/dev/null 2>&1 && printf "$ok twin on PATH ($(command -v twin))\n" || printf "$warn twin not on PATH (add $TWIN_DIR/bin)\n"
+  [ -d "$WIKI" ] && printf "$ok vault structure ($(find "$WIKI" -name '*.md' 2>/dev/null | wc -l | tr -d ' ') wiki pages)\n" || printf "$bad vault missing wiki/\n"
+  command -v python3 >/dev/null 2>&1 && printf "$ok python3\n" || printf "$bad python3 missing (registry/status)\n"
+
+  echo "Sync"
+  if ( cd "$TWIN_DIR" && git rev-parse --is-inside-work-tree >/dev/null 2>&1 ); then
+    if ( cd "$TWIN_DIR" && git remote get-url origin >/dev/null 2>&1 ); then
+      printf "$ok git remote: $(cd "$TWIN_DIR" && git remote get-url origin)\n"
+    else printf "$warn git repo but no remote (twin sync won't push)\n"; fi
+    printf "    last commit: $(cd "$TWIN_DIR" && git log -1 --format='%cr — %s' 2>/dev/null | head -c 70)\n"
+  else printf "$bad not a git repo (run: git init)\n"; fi
+
+  echo "Automation"
+  local jobs; jobs="$(launchctl list 2>/dev/null | grep -i twin | awk '{print $3}' | tr '\n' ' ')"
+  [ -n "$jobs" ] && printf "$ok scheduled jobs loaded: $jobs\n" || printf "$warn no launchd jobs (nightly/weekly won't auto-run)\n"
+  local st="$HOME/.claude/settings.json"
+  if grep -q "twin-session" "$st" 2>/dev/null; then printf "$ok capture hooks wired in settings.json\n"; else printf "$warn SessionStart/End hooks not in settings.json\n"; fi
+
+  if [ "$(uname)" = "Darwin" ]; then
+    echo "Life-OS (macOS)"
+    command -v swift >/dev/null 2>&1 && printf "$ok swift (calendar/reminders reader)\n" || printf "$warn swift missing (no EventKit calendar/reminders)\n"
+    if swift "$SELF/twin-rem.swift" list >/dev/null 2>&1; then printf "$ok Reminders access granted\n"; else printf "$warn Reminders access denied (System Settings > Privacy > Reminders)\n"; fi
+    if swift "$SELF/twin-cal.swift" 1 >/dev/null 2>&1; then printf "$ok Calendar access granted\n"; else printf "$warn Calendar access denied — grant your terminal app in System Settings > Privacy > Calendars\n"; fi
+  fi
+
+  echo "Optional"
+  command -v defuddle >/dev/null 2>&1 && printf "$ok defuddle (twin clip)\n" || printf "$warn defuddle missing (twin clip; npm i -g defuddle)\n"
+  command -v qmd >/dev/null 2>&1 && printf "$ok qmd (semantic search)\n" || printf "$warn qmd not installed (search falls back to grep)\n"
+
+  echo
+  printf "Pending: %s inbox, %s chats unprocessed\n" \
+    "$(find "$INBOX" -name '*.md' 2>/dev/null | wc -l | tr -d ' ')" \
+    "$(find "$RAW/chats" -name '*.md' 2>/dev/null | wc -l | tr -d ' ')"
+}
+
 cmd_status() {
   echo "twin @ $TWIN_DIR"
   echo "  inbox unprocessed : $(find "$INBOX" -name '*.md' 2>/dev/null | wc -l | tr -d ' ')"
@@ -348,6 +389,7 @@ twin - your second brain (system: twin, instance: <your vault>)
   twin sync [-m MSG]               secret-scan, commit, push to your git remote
   twin nightly                     ingest + (conditional) tidy + sync  [cheap, scheduled]
   twin weekly                      ingest + lint + research + tidy + sync  [deep, scheduled]
+  twin doctor                      health check: deps, permissions, schedule, sync
   twin status                      show brain stats
 EOF
 }
@@ -375,6 +417,7 @@ main() {
     sync)     cmd_sync "$@";;
     nightly)  cmd_nightly "$@";;
     weekly)   cmd_weekly "$@";;
+    doctor)   cmd_doctor "$@";;
     status)   cmd_status "$@";;
     help|-h|--help) usage;;
     *) usage; die "unknown command: $cmd";;
