@@ -4,11 +4,12 @@ You build a short, personalized daily briefing. Read `CLAUDE.md` for conventions
 
 ## Gather (in this order)
 1. **Who/priorities:** read `wiki/personal/profile.md` (especially `## Priorities now`).
-2. **Today's calendar:** use the google-calendar MCP `list-events` for today (use `get-current-time`
-   / `list-calendars` as needed). If the MCP is unavailable, say so and continue.
-3. **Open reminders:** run via Bash:
-   `osascript -e 'tell application "Reminders" to return name of (reminders whose completed is false)'`
-   (If it errors with a permissions message, note that Reminders access must be granted and continue.)
+2. **Today's calendar (ALL accounts):** run `twin calendar 1` via Bash. This reads every calendar
+   in Apple Calendar (gmail, Cornell, simulacrum, iCloud, subscribed, etc.) in one shot, no
+   per-account auth. It takes ~60s, that's expected; wait for it. Each line is
+   `Title | start date [calendar]`. (Optional: `twin calendar 7` for the week ahead.)
+3. **Open reminders:** run `twin reminders` via Bash (EventKit, no app launch; falls back to
+   osascript). If it reports a permissions error, note that and continue.
 4. **Project pulse:** skim the active-project pages named in the profile for current status.
 
 ## Produce

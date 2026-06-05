@@ -56,6 +56,8 @@ twin tidy                              # cheap clean + sort into MOCs
 twin lint                              # deep reconcile + health audit
 twin research 3                        # fill up to 3 web-research gaps
 twin remind "call the dentist"         # create an Apple Reminder (macOS)
+twin calendar [days]                   # today's events, ALL Apple Calendar accounts (EventKit)
+twin reminders                         # open reminders (EventKit)
 twin agenda                            # briefing: calendar + reminders + priorities -> generated/
 twin status
 ```
@@ -89,9 +91,11 @@ work on git deltas instead of re-reading the whole vault. Tune with `TWIN_CHEAP_
 twin can act on the world, not just remember it:
 - `twin remind "..."` writes to **Apple Reminders** (local, via `osascript` — grant Reminders
   access on first run).
-- `twin agenda` builds a daily briefing from your **calendar** (any calendar MCP you've configured,
-  e.g. [google-calendar-mcp](https://github.com/nspady/google-calendar-mcp)) + open reminders +
-  your `profile.md` priorities, saved to `generated/`.
+- `twin calendar` / `twin reminders` read **all your Apple Calendar accounts + Reminders** directly
+  via **EventKit** (no app launch, fast, every account you've added to macOS, no per-account OAuth).
+  First run needs a one-time Calendar/Reminders permission grant in System Settings → Privacy.
+- `twin agenda` builds a daily briefing from your calendar + open reminders + your `profile.md`
+  priorities, saved to `generated/`.
 - `ingest` turns clear action items in your notes into reminders automatically.
 
 These are optional. Calendar features need a calendar MCP configured; reminders need macOS.

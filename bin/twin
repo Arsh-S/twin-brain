@@ -24,11 +24,10 @@ REGISTRY="$CONFIG/projects.json"
 CLAUDE_BIN="${CLAUDE_BIN:-claude}"
 AGENT_TOOLS="Bash,Read,Write,Edit,Glob,Grep"
 RESEARCH_TOOLS="Bash,Read,Write,Edit,Glob,Grep,WebSearch,WebFetch"
-# agenda reads a calendar via an MCP if you have one configured (default: google-calendar MCP).
 AGENDA_TOOLS="Bash,Read,Write,Edit,Glob,Grep,mcp__google-calendar__list-events,mcp__google-calendar__list-calendars,mcp__google-calendar__get-current-time,mcp__google-calendar__create-event"
 CHEAP_MODEL="${TWIN_CHEAP_MODEL:-haiku}"   # mechanical work runs on a cheap model to save quota
 RESEARCH_CAP="${TWIN_RESEARCH_CAP:-3}"     # max web-research gaps filled per run
-REMINDER_LIST="${TWIN_REMINDER_LIST:-Reminders}"   # Apple Reminders list to write into (macOS)
+REMINDER_LIST="${TWIN_REMINDER_LIST:-Reminders}"   # Apple Reminders list to write into
 
 ts()      { date "+%Y-%m-%d %H:%M:%S"; }
 day()     { date "+%Y-%m-%d"; }
@@ -203,7 +202,21 @@ cmd_remind() { # create an Apple Reminder (deterministic, no LLM). macOS only.
     || die "could not create reminder (grant Reminders access: System Settings > Privacy > Reminders)"
 }
 
-cmd_agenda() { # read your calendar (MCP) + Apple Reminders + priorities -> briefing in generated/
+cmd_calendar() { # events from ALL Apple Calendar accounts via EventKit (no app launch). arg: span days (default 1)
+  [ "$(uname)" = "Darwin" ] || die "twin calendar needs macOS"
+  command -v swift >/dev/null 2>&1 || die "twin calendar needs swift (Xcode Command Line Tools)"
+  swift "$SELF/twin-cal.swift" "${1:-1}"
+}
+
+cmd_reminders() { # open reminders via EventKit (no app launch); fall back to osascript if not permitted
+  [ "$(uname)" = "Darwin" ] || die "twin reminders needs macOS"
+  if command -v swift >/dev/null 2>&1 && swift "$SELF/twin-rem.swift" 2>/dev/null; then
+    return 0
+  fi
+  osascript -e 'tell application "Reminders" to return name of (reminders whose completed is false)' 2>/dev/null | tr ',' '\n'
+}
+
+cmd_agenda() { # read Apple Calendar (all accounts) + Apple Reminders + priorities -> briefing in generated/
   logline "agenda started"
   run_agent "$SKILLS/agenda.md" "Today is $(date '+%Y-%m-%d (%A)'). Build today's agenda briefing now." "" "$AGENDA_TOOLS"
   logline "agenda finished"
@@ -241,12 +254,16 @@ cmd_search() {
   fi
 }
 
-# secret scan before commit; returns nonzero if likely secret found
+# secret scan before commit; returns nonzero if likely secret found.
+# Only scans files git would actually COMMIT (respects .gitignore) so gitignored
+# session transcripts don't false-positive.
 secret_scan() {
+  cd "$TWIN_DIR"
   local hits
-  hits="$(grep -rInE \
-    '(sk-[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{36}|xox[baprs]-[A-Za-z0-9-]{10,}|-----BEGIN [A-Z ]*PRIVATE KEY-----|AIza[0-9A-Za-z_-]{35})' \
-    "$TWIN_DIR" --exclude-dir=.git 2>/dev/null || true)"
+  hits="$(git ls-files -co --exclude-standard -z 2>/dev/null \
+    | xargs -0 grep -InE \
+      '(sk-[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{36}|xox[baprs]-[A-Za-z0-9-]{10,}|-----BEGIN [A-Z ]*PRIVATE KEY-----|AIza[0-9A-Za-z_-]{35})' \
+      2>/dev/null || true)"
   if [ -n "$hits" ]; then
     echo "twin: POSSIBLE SECRETS DETECTED, aborting sync:" >&2
     echo "$hits" | head -20 >&2
@@ -319,7 +336,7 @@ twin - your second brain (system: twin, instance: <your vault>)
   twin tidy                        cheap mechanical clean + sort into MOCs (Haiku)
   twin research [N]                fill up to N web-research gaps (default 3, capped)
   twin remind "text" [--due STR]   create an Apple Reminder (macOS)
-  twin agenda                      briefing: calendar + reminders + priorities -> generated/
+  twin agenda                      briefing: Google Calendar + Reminders + priorities -> generated/
   twin chat TRANSCRIPT [CWD]       capture a session transcript (hook)
   twin track [PATH]                mark a project as tracked in the brain
   twin private [PATH]              mark a project as private (never captured)
@@ -344,7 +361,9 @@ main() {
     tidy)     cmd_tidy "$@";;
     research) cmd_research "$@";;
     remind)   cmd_remind "$@";;
-    agenda)   cmd_agenda "$@";;
+    calendar)  cmd_calendar "$@";;
+    reminders) cmd_reminders "$@";;
+    agenda)    cmd_agenda "$@";;
     chat)     cmd_chat "$@";;
     track)    cmd_track "$@";;
     private)  cmd_private "$@";;
