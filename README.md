@@ -55,9 +55,10 @@ twin ask "what do I know about X?"     # cited answer
 twin tidy                              # cheap clean + sort into MOCs
 twin lint                              # deep reconcile + health audit
 twin research 3                        # fill up to 3 web-research gaps
-twin remind "call the dentist"         # create an Apple Reminder (macOS)
-twin calendar [days]                   # today's events, ALL Apple Calendar accounts (EventKit)
-twin reminders                         # open reminders (EventKit)
+twin remind "call the dentist" --due "June 20, 2026 9:00 AM"   # add an Apple Reminder (macOS)
+twin remind done|edit|rm "match" [new title]                  # complete / edit / delete a reminder
+twin reminders                         # list open reminders (EventKit, no app launch)
+twin calendar [days]                   # events across ALL Apple Calendar accounts (EventKit)
 twin agenda                            # briefing: calendar + reminders + priorities -> generated/
 twin status
 ```
