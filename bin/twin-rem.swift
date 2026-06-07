@@ -42,6 +42,39 @@ func incomplete() -> [EKReminder] {
     return res
 }
 
+// every reminder (complete + incomplete) in the given calendars
+func allReminders(in cals: [EKCalendar]) -> [EKReminder] {
+    let pred = store.predicateForReminders(in: cals)
+    let s = DispatchSemaphore(value: 0); var res: [EKReminder] = []
+    store.fetchReminders(matching: pred) { r in res = r ?? []; s.signal() }; s.wait()
+    return res
+}
+
+func reminderSource() -> EKSource? {
+    if let s = store.calendars(for: .reminder).first?.source { return s }
+    if let s = store.sources.first(where: { $0.sourceType == .calDAV }) { return s }
+    return store.defaultCalendarForNewReminders()?.source ?? store.sources.first
+}
+
+func getOrCreateList(_ name: String) throws -> EKCalendar {
+    if let c = store.calendars(for: .reminder).first(where: { $0.title == name }) { return c }
+    let c = EKCalendar(for: .reminder, eventStore: store)
+    c.title = name
+    guard let src = reminderSource() else {
+        FileHandle.standardError.write("no reminder source available\n".data(using: .utf8)!); exit(1)
+    }
+    c.source = src
+    try store.saveCalendar(c, commit: true)
+    return c
+}
+
+// match by exact title first (case-insensitive), then by substring
+func findReminder(_ q: String) -> EKReminder? {
+    let needle = q.lowercased()
+    let all = incomplete()
+    return all.first(where: { ($0.title ?? "").lowercased() == needle }) ?? all.first(where: { ($0.title ?? "").lowercased().contains(needle) })
+}
+
 switch action {
 case "list":
     let df = DateFormatter(); df.dateFormat = "MMM d"
@@ -58,11 +91,53 @@ case "add":
     let r = EKReminder(eventStore: store)
     r.title = args[2]
     if args.count > 3, !args[3].isEmpty, let dc = parseDate(args[3]) { r.dueDateComponents = dc }
-    if args.count > 4, !args[4].isEmpty, let cal = store.calendars(for: .reminder).first(where: { $0.title == args[4] }) {
-        r.calendar = cal
+    if args.count > 4, !args[4].isEmpty {
+        r.calendar = try getOrCreateList(args[4])
     } else { r.calendar = store.defaultCalendarForNewReminders() }
     try store.save(r, commit: true)
     print("added: \(r.title ?? "")")
+
+case "lists":
+    for c in store.calendars(for: .reminder) { print(c.title) }
+
+case "mklist":
+    guard args.count > 2 else { FileHandle.standardError.write("need a list name\n".data(using:.utf8)!); exit(1) }
+    let c = try getOrCreateList(args[2]); print("list: \(c.title)")
+
+case "move":
+    guard args.count > 3 else { FileHandle.standardError.write("usage: move \"match\" \"List\"\n".data(using:.utf8)!); exit(1) }
+    guard let r = findReminder(args[2]) else { FileHandle.standardError.write("no reminder matching \"\(args[2])\"\n".data(using:.utf8)!); exit(1) }
+    let cal = try getOrCreateList(args[3])
+    let t = r.title ?? ""
+    r.calendar = cal
+    try store.save(r, commit: true)
+    print("moved: \(t) -> \(cal.title)")
+
+case "renamelist":
+    guard args.count > 3 else { FileHandle.standardError.write("usage: renamelist \"old\" \"new\"\n".data(using:.utf8)!); exit(1) }
+    guard let cal = store.calendars(for: .reminder).first(where: { $0.title == args[2] }) else { FileHandle.standardError.write("no list \"\(args[2])\"\n".data(using:.utf8)!); exit(1) }
+    if !cal.allowsContentModifications { FileHandle.standardError.write("list \"\(args[2])\" is read-only\n".data(using:.utf8)!); exit(1) }
+    let old = cal.title; cal.title = args[3]
+    try store.saveCalendar(cal, commit: true)
+    print("renamed: \(old) -> \(args[3])")
+
+case "dellist":
+    guard args.count > 2 else { FileHandle.standardError.write("usage: dellist \"name\" [\"moveOpenTo\"]\n".data(using:.utf8)!); exit(1) }
+    let reminderCals = store.calendars(for: .reminder)
+    guard let cal = reminderCals.first(where: { $0.title == args[2] }) else { FileHandle.standardError.write("no list \"\(args[2])\"\n".data(using:.utf8)!); exit(1) }
+    if reminderCals.count <= 1 { FileHandle.standardError.write("can't delete the only list\n".data(using:.utf8)!); exit(1) }
+    // reassign open reminders in this list to a target list so they aren't lost
+    let targetName = args.count > 3 && !args[3].isEmpty ? args[3] : (reminderCals.first(where: { $0.title != cal.title })?.title ?? "Reminders")
+    let target = try getOrCreateList(targetName)
+    if target.calendarIdentifier == cal.calendarIdentifier { FileHandle.standardError.write("target equals source\n".data(using:.utf8)!); exit(1) }
+    // reassign EVERY reminder (complete + incomplete) so removeCalendar never destroys data
+    var moved = 0
+    for r in allReminders(in: [cal]) {
+        r.calendar = target; try store.save(r, commit: false); moved += 1
+    }
+    if moved > 0 { try store.commit() }
+    try store.removeCalendar(cal, commit: true)
+    print("deleted list: \(args[2]) (moved \(moved) → \(target.title))")
 
 case "done", "edit", "delete":
     guard args.count > 2 else { FileHandle.standardError.write("need a match string\n".data(using:.utf8)!); exit(1) }
