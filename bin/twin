@@ -26,7 +26,7 @@ AGENT_TOOLS="Bash,Read,Write,Edit,Glob,Grep"
 RESEARCH_TOOLS="Bash,Read,Write,Edit,Glob,Grep,WebSearch,WebFetch"
 AGENDA_TOOLS="Bash,Read,Write,Edit,Glob,Grep,mcp__google-calendar__list-events,mcp__google-calendar__list-calendars,mcp__google-calendar__get-current-time,mcp__google-calendar__create-event"
 CHEAP_MODEL="${TWIN_CHEAP_MODEL:-haiku}"   # mechanical work runs on a cheap model to save quota
-RESEARCH_CAP="${TWIN_RESEARCH_CAP:-3}"     # max web-research gaps filled per run
+RESEARCH_TARGET="${TWIN_RESEARCH_TARGET:-${TWIN_RESEARCH_CAP:-3}}"  # soft target for web-research gaps per run (may be exceeded for high-value gaps)
 REMINDER_LIST="${TWIN_REMINDER_LIST:-Reminders}"   # Apple Reminders list to write into
 
 ts()      { date "+%Y-%m-%d %H:%M:%S"; }
@@ -173,10 +173,10 @@ cmd_tidy() { # cheap mechanical clean + sort (runs on the cheap model)
   logline "tidy finished"
 }
 
-cmd_research() { # capped web-research gap-fill (smart model + web tools)
-  local n="${1:-$RESEARCH_CAP}"
-  logline "research started (cap $n)"
-  run_agent "$SKILLS/research.md" "Fill AT MOST $n highest-value gaps from reports/lint-report.md. Hard cap: $n. Log each gap filled. If none worth filling, do nothing." "" "$RESEARCH_TOOLS"
+cmd_research() { # soft-budgeted web-research gap-fill (smart model + web tools)
+  local n="${1:-$RESEARCH_TARGET}"
+  logline "research started (target $n, soft)"
+  run_agent "$SKILLS/research.md" "Target ~$n highest-value gaps from reports/lint-report.md. This is a SOFT target, not a hard cap: you may exceed it for clearly high-value gaps (see the skill's Soft budget section), but don't run away or fill low-value gaps to use budget. Log each gap filled; if you went over the target, note why. If none worth filling, do nothing." "" "$RESEARCH_TOOLS"
   logline "research finished"
 }
 
@@ -303,11 +303,11 @@ cmd_nightly() { # cheap: ingest new, tidy ONLY if something changed, sync. near-
   logline "nightly run finished"
 }
 
-cmd_weekly() { # deep: ingest, reconcile/health lint, capped web research, sort, sync.
+cmd_weekly() { # deep: ingest, reconcile/health lint, soft-budgeted web research, sort, sync.
   logline "weekly run started"
   cmd_ingest --all || true
   cmd_lint || true
-  cmd_research "$RESEARCH_CAP" || true
+  cmd_research "$RESEARCH_TARGET" || true
   cmd_tidy || true
   cmd_sync -m "twin: weekly $(day)" || true
   logline "weekly run finished"
@@ -378,7 +378,7 @@ twin - your second brain (system: twin, instance: <your vault>)
   twin search "query"              keyword/semantic search the wiki
   twin lint                        deep health-check + reconcile + auto-clean (smart model)
   twin tidy                        cheap mechanical clean + sort into MOCs (Haiku)
-  twin research [N]                fill up to N web-research gaps (default 3, capped)
+  twin research [N]                fill ~N web-research gaps (default 3, soft target)
   twin remind "text" [--due STR]   create an Apple Reminder (macOS)
   twin agenda                      briefing: Google Calendar + Reminders + priorities -> generated/
   twin chat TRANSCRIPT [CWD]       capture a session transcript (hook)
