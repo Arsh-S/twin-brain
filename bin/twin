@@ -251,7 +251,15 @@ cmd_projects() { cat "$REGISTRY" 2>/dev/null || echo "{}"; }
 cmd_search() {
   [ $# -gt 0 ] || die "usage: twin search \"query\""
   if command -v qmd >/dev/null 2>&1; then
-    qmd search "$WIKI" "$*"
+    # ensure the wiki collection exists and is current, then hybrid (semantic) search.
+    # qsearch needs an embedding model; if absent it falls back to BM25, then to grep.
+    qmd collection list 2>/dev/null | grep -q 'twin-wiki' \
+      || qmd collection add "$WIKI" -n twin-wiki >/dev/null 2>&1
+    qmd update >/dev/null 2>&1
+    # hybrid: query expansion + BM25/vector RRF fusion (skip the reranker, which over-filters small wikis)
+    local hits; hits=$(qmd qsearch "$*" -c twin-wiki --no-rerank 2>/dev/null)
+    if [ -n "$hits" ]; then printf '%s\n' "$hits"
+    else qmd search "$*" -c twin-wiki 2>/dev/null || grep -rin --include='*.md' "$*" "$WIKI"; fi
   else
     grep -rin --include='*.md' "$*" "$WIKI" || echo "no matches (install qmd for semantic search)"
   fi
