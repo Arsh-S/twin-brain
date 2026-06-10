@@ -1,2 +1,5 @@
 .DS_Store
 *.log
+
+# machine-local run state (nightly/weekly once-per-day/week stamps)
+.state/

@@ -299,6 +299,17 @@ cmd_sync() {
 }
 
 cmd_nightly() { # cheap: ingest new, tidy ONLY if something changed, sync. near-zero on quiet days.
+  # once-per-day guard: launchd runs this at midnight AND at login (RunAtLoad), so a midnight that
+  # was missed because the Mac was powered off is caught up on next login — but it never runs more
+  # than once per calendar day. (Sleep is handled by launchd itself: it fires on wake.)
+  local force="" stamp="$TWIN_DIR/.state/nightly.lastrun" today; today="$(day)"
+  [ "${1:-}" = "--force" ] && force=1
+  mkdir -p "$TWIN_DIR/.state"
+  if [ -z "$force" ] && [ "$(cat "$stamp" 2>/dev/null)" = "$today" ]; then
+    echo "twin: nightly already ran today ($today), skipping (use --force to override)"
+    logline "nightly skipped (already ran $today)"
+    return 0
+  fi
   logline "nightly run started"
   cmd_ingest --all || true
   if wiki_dirty; then
@@ -308,16 +319,29 @@ cmd_nightly() { # cheap: ingest new, tidy ONLY if something changed, sync. near-
     logline "nightly | nothing new, tidy skipped"
   fi
   cmd_sync -m "twin: nightly $(day)" || true
+  echo "$today" > "$stamp"
   logline "nightly run finished"
 }
 
 cmd_weekly() { # deep: ingest, reconcile/health lint, soft-budgeted web research, sort, sync.
+  # once-per-week guard, mirrors nightly: launchd runs this Sun 03:00 AND at login (RunAtLoad), so a
+  # Sunday missed because the Mac was off is caught up on next login — but never runs more than once
+  # per ISO week. (Asleep at the scheduled time is handled by launchd: it fires on wake.)
+  local force="" stamp="$TWIN_DIR/.state/weekly.lastrun" thisweek; thisweek="$(date '+%G-W%V')"
+  [ "${1:-}" = "--force" ] && force=1
+  mkdir -p "$TWIN_DIR/.state"
+  if [ -z "$force" ] && [ "$(cat "$stamp" 2>/dev/null)" = "$thisweek" ]; then
+    echo "twin: weekly already ran this week ($thisweek), skipping (use --force to override)"
+    logline "weekly skipped (already ran $thisweek)"
+    return 0
+  fi
   logline "weekly run started"
   cmd_ingest --all || true
   cmd_lint || true
   cmd_research "$RESEARCH_TARGET" || true
   cmd_tidy || true
   cmd_sync -m "twin: weekly $(day)" || true
+  echo "$thisweek" > "$stamp"
   logline "weekly run finished"
 }
 
