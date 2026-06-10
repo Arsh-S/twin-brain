@@ -3,3 +3,9 @@
 
 # machine-local run state (nightly/weekly once-per-day/week stamps)
 .state/
+
+# web app build artifacts + deps
+app/node_modules/
+app/dist/
+app/.vite/
+app/tsconfig.tsbuildinfo
