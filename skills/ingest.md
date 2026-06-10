@@ -35,6 +35,10 @@ For each unprocessed source (in `raw-sources/inbox/`, `raw-sources/chats/`, or t
   tidy pass and MOCs can sort it automatically.
 - **Batch:** process all the listed sources in this one run; don't ask for another pass unless new
   files appear mid-run.
+- **Action items -> reminders:** if a source contains a clear, actionable commitment for the user (a
+  real task/deadline, not a vague idea), create an Apple Reminder via
+  `twin remind "<task>" --due "<Month D, YYYY h:mm AM>"` (omit --due if none). Only genuine,
+  actionable items, never speculative ones, and don't duplicate reminders you already created.
 
 ## Rules
 - One source can touch 5-15 wiki pages. That is expected and good.
