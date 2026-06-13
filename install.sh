@@ -35,7 +35,17 @@ mkdir -p "$TWIN_DIR"/{bin,config,skills,reports,docs,generated} \
          "$TWIN_DIR"/wiki/{people,concepts,projects,personal,learning,maps}
 
 cp "$REPO/skills/"*.md "$TWIN_DIR/skills/"
-cp "$REPO/bin/twin" "$TWIN_DIR/bin/twin"; chmod +x "$TWIN_DIR/bin/twin"
+cp "$REPO/bin/"* "$TWIN_DIR/bin/"; chmod +x "$TWIN_DIR/bin/twin"   # twin CLI + Swift EventKit helpers
+
+# optional web UI (run with `twin app`); copy source, never the deps/build output
+if [ -d "$REPO/app" ]; then
+  mkdir -p "$TWIN_DIR/app"
+  if command -v rsync >/dev/null 2>&1; then
+    rsync -a --exclude node_modules --exclude dist --exclude .vite "$REPO/app/" "$TWIN_DIR/app/"
+  else
+    cp -R "$REPO/app/." "$TWIN_DIR/app/"; rm -rf "$TWIN_DIR/app/node_modules" "$TWIN_DIR/app/dist"
+  fi
+fi
 [ -f "$TWIN_DIR/CLAUDE.md" ] || cp "$REPO/templates/CLAUDE.md" "$TWIN_DIR/CLAUDE.md"
 [ -f "$TWIN_DIR/config/twin.config.json" ] || cp "$REPO/templates/twin.config.json" "$TWIN_DIR/config/twin.config.json"
 [ -f "$TWIN_DIR/config/projects.json" ] || echo '{}' > "$TWIN_DIR/config/projects.json"
@@ -104,6 +114,10 @@ id_rsa*
 .obsidian/workspace*
 .trash/
 raw-sources/chats/*.transcript.jsonl
+.state/
+app/node_modules/
+app/dist/
+app/.vite/
 EOF
 fi
 
@@ -192,6 +206,7 @@ Try it:
   twin capture "twin is my new second brain"
   twin ingest
   twin ask "what do I know about twin?"
+  twin app        # optional: the local web UI at http://localhost:5179
 
 Make it yours: open $TWIN_DIR in Obsidian (Open folder as vault) for the graph view.
 Keep your data PRIVATE: push $TWIN_DIR to a private repo, not a public one.

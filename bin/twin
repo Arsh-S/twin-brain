@@ -386,6 +386,15 @@ cmd_doctor() { # health check: deps, permissions, schedule, hooks, sync
     "$(find "$RAW/chats" -name '*.md' 2>/dev/null | wc -l | tr -d ' ')"
 }
 
+cmd_app() { # launch the local web UI (the Vite dev server doubles as the API)
+  local appdir="$TWIN_DIR/app"
+  [ -d "$appdir" ] || die "no app/ in $TWIN_DIR (re-run install.sh to add the web app)"
+  command -v npm >/dev/null 2>&1 || die "twin app needs npm (install Node.js)"
+  [ -d "$appdir/node_modules" ] || ( cd "$appdir" && echo "twin: installing app deps (first run)..." && npm install )
+  echo "twin: starting web app at http://localhost:5179 (Ctrl-C to stop)"
+  ( cd "$appdir" && exec npm run dev )
+}
+
 cmd_status() {
   echo "twin @ $TWIN_DIR"
   echo "  inbox unprocessed : $(find "$INBOX" -name '*.md' 2>/dev/null | wc -l | tr -d ' ')"
@@ -422,6 +431,7 @@ twin - your second brain (system: twin, instance: <your vault>)
   twin nightly                     ingest + (conditional) tidy + sync  [cheap, scheduled]
   twin weekly                      ingest + lint + research + tidy + sync  [deep, scheduled]
   twin doctor                      health check: deps, permissions, schedule, sync
+  twin app                         launch the local web UI (http://localhost:5179)
   twin status                      show brain stats
 EOF
 }
@@ -450,6 +460,7 @@ main() {
     nightly)  cmd_nightly "$@";;
     weekly)   cmd_weekly "$@";;
     doctor)   cmd_doctor "$@";;
+    app)      cmd_app "$@";;
     status)   cmd_status "$@";;
     help|-h|--help) usage;;
     *) usage; die "unknown command: $cmd";;
