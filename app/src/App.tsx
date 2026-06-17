@@ -113,6 +113,15 @@ function fmtClock(d: Date): string {
   return `${h}:${String(m).padStart(2, '0')} ${ap}`
 }
 
+// Order list names to match a reference order (Apple Reminders' sidebar order);
+// names not in the reference keep their relative order and fall to the end.
+// Array.sort is stable, so ties preserve input order.
+function sortByOrder(names: string[], order: string[]): string[] {
+  const pos = new Map(order.map((n, i) => [n, i]))
+  const rank = (n: string) => (pos.has(n) ? (pos.get(n) as number) : Number.POSITIVE_INFINITY)
+  return [...names].sort((a, b) => rank(a) - rank(b))
+}
+
 export default function App() {
   const rootRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -1024,7 +1033,8 @@ function buildVM(s: UiState, live: Live, nowMs: number) {
   const box = () => `width:16px;height:16px;border-radius:5px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;border:1.5px solid var(--text-3);background:transparent`
   const lists: string[] = []
   for (const r of live.reminders) if (!lists.includes(r.list)) lists.push(r.list)
-  const reminderGroups = lists.map(label => ({
+  // follow Apple Reminders' list order (live.lists), so Today + Tasks groups match
+  const reminderGroups = sortByOrder(lists, live.lists).map(label => ({
     label,
     items: live.reminders.filter(r => r.list === label).map(r => ({
       title: r.title, due: r.due, boxStyle: box(),
