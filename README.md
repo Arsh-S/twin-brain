@@ -185,6 +185,9 @@ capture --> raw-sources/ --> ingest (Claude) --> wiki/ --> ask / SessionStart re
 - `bin/` — the `twin` CLI plus the Swift EventKit helpers.
 - `CLAUDE.md` — the schema that makes the agent a disciplined maintainer.
 
+For a from-the-code walkthrough (engine, app API map, EventKit helpers, automation), see
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
 ## Privacy
 
 This framework repo contains only functionality, never personal content. **Your vault holds your
