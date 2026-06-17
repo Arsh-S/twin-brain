@@ -112,6 +112,10 @@ files directly. The dev server is the app, so there is nothing extra to deploy.
 twin app          # or: cd app && npm install && npm run dev
 ```
 
+![twin web app — Today screen](docs/twin-app-home.png)
+
+*The Today screen on first load (demo data shown).*
+
 Eight screens, reachable with **Option + 1 to 8**:
 
 - **Today** — a briefing from your calendar, open reminders, and `profile.md` priorities, plus a project pulse and live `twin status`.
