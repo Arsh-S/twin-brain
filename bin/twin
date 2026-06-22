@@ -25,6 +25,7 @@ CLAUDE_BIN="${CLAUDE_BIN:-claude}"
 AGENT_TOOLS="Bash,Read,Write,Edit,Glob,Grep"
 RESEARCH_TOOLS="Bash,Read,Write,Edit,Glob,Grep,WebSearch,WebFetch"
 AGENDA_TOOLS="Bash,Read,Write,Edit,Glob,Grep,mcp__google-calendar__list-events,mcp__google-calendar__list-calendars,mcp__google-calendar__get-current-time,mcp__google-calendar__create-event"
+SCOUT_TOOLS="Bash,Read,Write,Edit,Glob,Grep,WebSearch,WebFetch"   # discovery scout: web + local, no MCP calendar writes
 CHEAP_MODEL="${TWIN_CHEAP_MODEL:-haiku}"   # mechanical work runs on a cheap model to save quota
 RESEARCH_TARGET="${TWIN_RESEARCH_TARGET:-${TWIN_RESEARCH_CAP:-3}}"  # soft target for web-research gaps per run (may be exceeded for high-value gaps)
 REMINDER_LIST="${TWIN_REMINDER_LIST:-Reminders}"   # Apple Reminders list to write into
@@ -225,6 +226,37 @@ cmd_agenda() { # read Apple Calendar (all accounts) + Apple Reminders + prioriti
   logline "agenda finished"
 }
 
+cmd_scout() { # proactive outside-world discovery (web + smart model). mode: --deep (weekly) | --daily (morning peek)
+  local mode="${1:---deep}"
+  local extra
+  case "$mode" in
+    --daily) extra="Mode: --daily. Light, cheap peek — ONLY time-sensitive items (today/tonight or an imminent deadline). Use a stricter bar (merge-findings --bar 0.8 --cap 2). If nothing is urgent, surface nothing.";;
+    *)       mode="--deep"; extra="Mode: --deep. Full weekly sweep across all interest categories and the user's locations, looking out ~1–4 weeks. Use merge-findings --bar 0.7 --cap 3.";;
+  esac
+  logline "scout started ($mode)"
+  run_agent "$SKILLS/scout.md" "Today is $(date '+%Y-%m-%d (%A)'). Run the discovery scout now. $extra" "" "$SCOUT_TOOLS"
+  logline "scout finished ($mode)"
+}
+
+cmd_morning() { # daily 08:00 job: briefing + triage, light scout peek, write today.json, morning ping.
+  # once-per-day guard mirrors nightly: launchd runs this at 08:00 AND at login (RunAtLoad), so an
+  # 08:00 missed because the Mac was off is caught up on next login — never more than once per day.
+  local force="" stamp="$TWIN_DIR/.state/morning.lastrun" today; today="$(day)"
+  [ "${1:-}" = "--force" ] && force=1
+  mkdir -p "$TWIN_DIR/.state"
+  if [ -z "$force" ] && [ "$(cat "$stamp" 2>/dev/null)" = "$today" ]; then
+    echo "twin: morning already ran today ($today), skipping (use --force to override)"
+    logline "morning skipped (already ran $today)"
+    return 0
+  fi
+  logline "morning run started"
+  cmd_agenda || true
+  cmd_scout --daily || true
+  cmd_sync -m "twin: morning $(day)" || true
+  echo "$today" > "$stamp"
+  logline "morning run finished"
+}
+
 cmd_chat() { # ingest a session transcript (used by SessionEnd hook). arg: transcript path
   local tp="${1:-}"; local cwd="${2:-}"
   [ -f "$tp" ] || die "transcript not found: $tp"
@@ -339,6 +371,7 @@ cmd_weekly() { # deep: ingest, reconcile/health lint, soft-budgeted web research
   cmd_ingest --all || true
   cmd_lint || true
   cmd_research "$RESEARCH_TARGET" || true
+  cmd_scout --deep || true
   cmd_tidy || true
   cmd_sync -m "twin: weekly $(day)" || true
   echo "$thisweek" > "$stamp"
@@ -365,7 +398,7 @@ cmd_doctor() { # health check: deps, permissions, schedule, hooks, sync
 
   echo "Automation"
   local jobs; jobs="$(launchctl list 2>/dev/null | grep -i twin | awk '{print $3}' | tr '\n' ' ')"
-  [ -n "$jobs" ] && printf "$ok scheduled jobs loaded: $jobs\n" || printf "$warn no launchd jobs (nightly/weekly won't auto-run)\n"
+  [ -n "$jobs" ] && printf "$ok scheduled jobs loaded: $jobs\n" || printf "$warn no launchd jobs (nightly/weekly/morning won't auto-run)\n"
   local st="$HOME/.claude/settings.json"
   if grep -q "twin-session" "$st" 2>/dev/null; then printf "$ok capture hooks wired in settings.json\n"; else printf "$warn SessionStart/End hooks not in settings.json\n"; fi
 
@@ -420,8 +453,10 @@ twin - your second brain (system: twin, instance: <your vault>)
   twin lint                        deep health-check + reconcile + auto-clean (smart model)
   twin tidy                        cheap mechanical clean + sort into MOCs (Haiku)
   twin research [N]                fill ~N web-research gaps (default 3, soft target)
+  twin scout [--deep|--daily]      proactive web discovery -> 'Worth your time' findings
   twin remind "text" [--due STR]   create an Apple Reminder (macOS)
   twin agenda                      briefing: Google Calendar + Reminders + priorities -> generated/
+  twin morning                     daily 08:00 job: briefing + triage + scout peek + sync
   twin chat TRANSCRIPT [CWD]       capture a session transcript (hook)
   twin track [PATH]                mark a project as tracked in the brain
   twin private [PATH]              mark a project as private (never captured)
@@ -429,7 +464,7 @@ twin - your second brain (system: twin, instance: <your vault>)
   twin projects                    show the project registry
   twin sync [-m MSG]               secret-scan, commit, push to your git remote
   twin nightly                     ingest + (conditional) tidy + sync  [cheap, scheduled]
-  twin weekly                      ingest + lint + research + tidy + sync  [deep, scheduled]
+  twin weekly                      ingest + lint + research + scout + tidy + sync  [deep, scheduled]
   twin doctor                      health check: deps, permissions, schedule, sync
   twin app                         launch the local web UI (http://localhost:5179)
   twin status                      show brain stats
@@ -447,10 +482,12 @@ main() {
     lint)     cmd_lint "$@";;
     tidy)     cmd_tidy "$@";;
     research) cmd_research "$@";;
+    scout)    cmd_scout "$@";;
     remind)   cmd_remind "$@";;
     calendar)  cmd_calendar "$@";;
     reminders) cmd_reminders "$@";;
     agenda)    cmd_agenda "$@";;
+    morning)   cmd_morning "$@";;
     chat)     cmd_chat "$@";;
     track)    cmd_track "$@";;
     private)  cmd_private "$@";;

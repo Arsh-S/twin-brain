@@ -3,7 +3,7 @@ import type { ChangeEvent, DragEvent } from 'react'
 import { css } from './css'
 import { applyTheme } from './theme'
 import { api } from './api'
-import type { Activity, CalEvent, Capture, DoctorGroup, RegistryEntry, Reminder, WikiPage, WikiTreeDomain } from './api'
+import type { Activity, CalEvent, Capture, DoctorGroup, Finding, RegistryEntry, Reminder, Today, WikiPage, WikiTreeDomain } from './api'
 import type { Direction, Mode, Screen } from './types'
 import { Loading, MarkText, Spinner } from './ui'
 
@@ -57,13 +57,14 @@ interface Live {
   doctor: DoctorGroup[]
   calOk: boolean
   calEvents: CalEvent[]
+  today: Today | null
 }
 
 const EMPTY_LIVE: Live = {
   loading: true,
   status: { inbox: 0, chats: 0, pages: 0, tracked: 0 },
   captures: [], reminders: [], lists: [], activity: [], wikiTree: [], page: null,
-  registry: [], config: '{}', doctor: [], calOk: false, calEvents: [],
+  registry: [], config: '{}', doctor: [], calOk: false, calEvents: [], today: null,
 }
 
 function loadPrefs(): { mode: Mode; direction: Direction; accent: string; screen: Screen } {
@@ -179,11 +180,12 @@ export default function App() {
   const reloadActivity = useCallback(async () => { try { mergeLive({ activity: (await api.activity()).activity }) } catch { /* */ } }, [mergeLive])
   const reloadRegistry = useCallback(async () => { try { mergeLive({ registry: (await api.registry()).registry }) } catch { /* */ } }, [mergeLive])
   const reloadDoctor = useCallback(async () => { try { mergeLive({ doctor: (await api.doctor()).groups }) } catch { /* */ } }, [mergeLive])
+  const reloadToday = useCallback(async () => { try { mergeLive({ today: await api.today() }) } catch { /* */ } }, [mergeLive])
 
   useEffect(() => {
     let alive = true
     ;(async () => {
-      const [status, caps, rems, lst, act, tree, prof, reg, cfg, doc, cal] = await Promise.all([
+      const [status, caps, rems, lst, act, tree, prof, reg, cfg, doc, cal, tday] = await Promise.all([
         api.status().catch(() => EMPTY_LIVE.status),
         api.captures().catch(() => ({ captures: [] })),
         api.reminders().catch(() => ({ ok: false, reminders: [] as Reminder[] })),
@@ -195,6 +197,7 @@ export default function App() {
         api.config().catch(() => ({ config: '{}' })),
         api.doctor().catch(() => ({ groups: [] })),
         api.calendar(7).catch(() => ({ ok: false, events: [] as CalEvent[] })),
+        api.today().catch(() => null as Today | null),
       ])
       if (!alive) return
       // pick a sensible default wiki page
@@ -204,7 +207,7 @@ export default function App() {
       setLive({
         loading: false, status, captures: caps.captures, reminders: rems.reminders || [], lists: lst.lists || [], activity: act.activity,
         wikiTree: tree.domains, page: null, registry: reg.registry, config: cfg.config, doctor: doc.groups,
-        calOk: cal.ok, calEvents: cal.events || [],
+        calOk: cal.ok, calEvents: cal.events || [], today: tday,
       })
       const defaultList = (lst.lists || []).find(l => l !== 'Reminders') || (lst.lists || [])[0] || ''
       setS(prev => ({ ...prev, prioritiesDraft: prof.priorities, currentPage: prev.currentPage ?? first, addList: prev.addList || defaultList }))
@@ -352,9 +355,11 @@ export default function App() {
     runJob(key, 'running on the local Max engine…', async () => {
       const r = await api.job(key)
       update(p => ({ maintResults: { ...p.maintResults, [key]: (r.output || '').split('\n').filter(Boolean).slice(-1)[0] || (r.ok ? 'done' : (r.error || 'failed')) } }))
-      await Promise.all([reloadActivity(), reloadStatus(), key === 'tidy' || key === 'lint' ? reloadDoctor() : Promise.resolve()])
+      await Promise.all([reloadActivity(), reloadStatus(),
+        key === 'tidy' || key === 'lint' ? reloadDoctor() : Promise.resolve(),
+        key === 'agenda' || key === 'scout' ? reloadToday() : Promise.resolve()])
     }).catch(() => { /* */ })
-  }, [s.jobs, runJob, update, reloadActivity, reloadStatus, reloadDoctor])
+  }, [s.jobs, runJob, update, reloadActivity, reloadStatus, reloadDoctor, reloadToday])
 
   const selectPage = useCallback((name: string) => patch({ screen: 'wiki', currentPage: name, editing: false }), [patch])
 
@@ -525,7 +530,7 @@ export default function App() {
                       <div style={css('font-family:var(--font-mono);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);margin-bottom:9px')}>Most important today</div>
                       {live.loading
                         ? <Loading label="Building briefing…" pad={8} />
-                        : <div style={css('font-size:15.5px;line-height:1.5;color:var(--text)')}>{vm.mostImportant}</div>}
+                        : <div style={css('font-size:15.5px;line-height:1.5;color:var(--text)')}>{live.today?.briefing?.mostImportant || vm.mostImportant}</div>}
                     </div>
 
                     <div style={css('background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:18px 20px')}>
@@ -596,6 +601,35 @@ export default function App() {
                       </div>
                     </div>
                   </div>
+                </div>
+
+                {/* Worth your time — proactive scout findings */}
+                <div style={css('background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px 18px;margin-top:16px')}>
+                  <div style={css('display:flex;align-items:center;justify-content:space-between;margin-bottom:11px')}>
+                    <div style={css('font-family:var(--font-mono);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent)')}>Worth your time</div>
+                    <button className="hov-surface2" onClick={() => runMaint('scout')} style={css('display:inline-flex;align-items:center;gap:6px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 11px;font-size:11.5px;font-weight:600;cursor:pointer')}>🔭 Scout now</button>
+                  </div>
+                  {live.loading
+                    ? <Loading label="Loading findings…" pad={8} />
+                    : (live.today?.findings?.length ?? 0) === 0
+                      ? <div style={css('font-size:13px;color:var(--text-3)')}>Nothing surfaced yet. The scout runs each morning and Sunday; hit “Scout now” to look immediately.</div>
+                      : (
+                        <div style={css('display:flex;flex-direction:column;gap:13px')}>
+                          {[...(live.today?.findings ?? [])].sort((a, b) => (b.score || 0) - (a.score || 0)).map((f: Finding, i) => (
+                            <div key={i} style={css('display:flex;gap:11px;align-items:flex-start')}>
+                              <span style={css(`width:7px;height:7px;border-radius:50%;margin-top:6px;flex:0 0 auto;background:${f.pushed ? 'var(--accent)' : 'var(--text-3)'}`)} />
+                              <div style={css('flex:1;min-width:0')}>
+                                <div style={css('font-size:14px;font-weight:600')}>{f.title}
+                                  {f.pushed ? <span style={css('margin-left:8px;font-family:var(--font-mono);font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--accent-fg);background:var(--accent);border-radius:100px;padding:1px 7px')}>pushed</span> : null}
+                                </div>
+                                {f.why ? <div style={css('font-size:12.5px;color:var(--text-2);margin-top:3px')}>{f.why}</div> : null}
+                                <div style={css('font-size:11.5px;color:var(--text-3);margin-top:3px')}>{[f.when, f.where].filter(Boolean).join(' · ')}</div>
+                                {f.url ? <a href={f.url} target="_blank" rel="noreferrer" style={css('font-family:var(--font-mono);font-size:11px;color:var(--accent);margin-top:2px;display:inline-block;overflow-wrap:anywhere')}>{f.url}</a> : null}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                 </div>
               </div>
             )}

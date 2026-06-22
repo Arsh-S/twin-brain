@@ -3,7 +3,7 @@
 # Usage:
 #   ./install.sh [--dir PATH] [--no-launchd] [--with-skills]
 #     --dir PATH      where your brain lives (default: ~/twin)
-#     --no-launchd    skip macOS scheduled jobs (nightly/weekly)
+#     --no-launchd    skip macOS scheduled jobs (nightly/weekly/morning)
 #     --with-skills   also install kepano/obsidian-skills + the defuddle CLI
 set -euo pipefail
 
@@ -170,14 +170,14 @@ fi
 # --- 5. scheduled jobs (macOS launchd) ---
 if [ "$DO_LAUNCHD" = "1" ] && [ "$(uname)" = "Darwin" ]; then
   LA="$HOME/Library/LaunchAgents"; mkdir -p "$LA"
-  for job in nightly weekly; do
+  for job in nightly weekly morning; do
     sed "s|__HOME__|$HOME|g" "$REPO/templates/com.twin.$job.plist" > "$LA/com.twin.$job.plist"
     launchctl unload "$LA/com.twin.$job.plist" 2>/dev/null || true
     launchctl load "$LA/com.twin.$job.plist"
   done
-  say "Scheduled nightly (02:30) + weekly (Sun 03:00) jobs"
+  say "Scheduled nightly (02:30) + weekly (Sun 03:00) + morning (08:00) jobs"
 elif [ "$DO_LAUNCHD" = "1" ]; then
-  say "Not macOS: skipping launchd. Add cron jobs: 'twin nightly' daily, 'twin weekly' weekly."
+  say "Not macOS: skipping launchd. Add cron jobs: 'twin nightly' daily, 'twin weekly' weekly, 'twin morning' daily."
 fi
 
 # --- 6. optional: obsidian skills + defuddle ---

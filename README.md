@@ -32,7 +32,7 @@ pattern, with [kepano/obsidian-skills](https://github.com/kepano/obsidian-skills
 - [The CLI](#the-cli)
 - [The web app](#the-web-app)
 - [Life-OS: calendar and reminders](#life-os-calendar-and-reminders)
-- [Automation: nightly and weekly](#automation-nightly-and-weekly)
+- [Automation: nightly, weekly, and morning](#automation-nightly-weekly-and-morning)
 - [Running on your Claude subscription (no API tokens)](#running-on-your-claude-subscription-no-api-tokens)
 - [How it works](#how-it-works)
 - [Privacy](#privacy)
@@ -91,8 +91,10 @@ twin search "topic"                     # hybrid semantic + keyword search
 twin tidy                               # cheap mechanical clean + sort into MOCs
 twin lint                               # deep reconcile + health audit
 twin research 3                         # fill ~3 web-research gaps (soft target)
+twin scout                              # proactive web discovery -> "Worth your time" findings
 twin remind "call the dentist" --due "June 20, 2026 9:00 AM"   # Apple Reminder
 twin agenda                             # briefing: calendar + reminders + priorities
+twin morning                            # daily 08:00 job: briefing + triage + scout peek + sync
 twin app                                # launch the web UI (http://localhost:5179)
 twin doctor                             # health check: deps, permissions, schedule, sync
 twin status
@@ -135,22 +137,24 @@ apps:
 
 - `twin remind "..."` and `twin remind done|edit|rm "match"` create, complete, edit, and delete **Apple Reminders**. The web app adds list management (create, rename, move between lists, delete).
 - `twin reminders` and `twin calendar [days]` read open reminders and events across all accounts.
-- `twin agenda` writes a daily briefing (calendar + reminders + your `profile.md` priorities) into `generated/`.
+- `twin agenda` writes a daily briefing (calendar + reminders + your `profile.md` priorities) into `generated/`; `twin morning` runs it at 08:00 with a light discovery `scout` peek.
 - `ingest` turns clear action items in your notes and sessions into reminders automatically.
 - Calendar **writes** (optional) go through a calendar MCP to a single calendar you designate.
 
 First run prompts once for Calendar and Reminders permission (System Settings, Privacy); grant your
 terminal. `twin doctor` verifies access.
 
-## Automation: nightly and weekly
+## Automation: nightly, weekly, and morning
 
-Two scheduled bundles keep the brain current without you thinking about it (macOS `launchd`, or cron
-elsewhere):
+Three scheduled bundles keep the brain current without you thinking about it (macOS `launchd`, or
+cron elsewhere):
 
 - **nightly** — `ingest` new sources, `tidy` (only if the wiki actually changed), then `sync`. On a
   quiet day it does almost nothing.
 - **weekly** — `ingest`, then `lint` (deep reconcile + health audit), `research` (soft-budgeted web
-  gap-fill), `tidy`, and `sync`.
+  gap-fill), `scout` (proactive discovery), `tidy`, and `sync`.
+- **morning** (08:00) — `agenda` (briefing + triage of your day) plus a light `scout` peek for
+  time-sensitive finds, then `sync`. Results land on the app's Today screen ("Worth your time").
 
 Both are **idempotent**: they stamp a last-run marker and skip if already run this day or ISO week.
 `launchd` fires them on schedule and again at login, so a run missed because the Mac was off is
@@ -178,7 +182,7 @@ costs nothing beyond your subscription either.
 capture --> raw-sources/ --> ingest (Claude) --> wiki/ --> ask / SessionStart recall
    ^             (immutable)        (compiles)     (the brain)            |
    +------------------------ compounding loop ------------------------------+
-                nightly: ingest + tidy + sync   .   weekly: + lint + research
+      nightly: ingest + tidy + sync  .  weekly: + lint + research + scout  .  morning: agenda + scout
 ```
 
 - `raw-sources/` — immutable inputs (you write; the agent only reads and moves).

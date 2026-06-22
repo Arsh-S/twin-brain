@@ -9,6 +9,9 @@ export interface WikiPage { found: boolean; name: string; title: string; domain:
 export interface RegistryEntry { path: string; name: string; status: string }
 export interface DoctorGroup { label: string; rows: { text: string; mark: string }[] }
 export interface CalEvent { title: string; start: string; end: string; allDay: boolean; calendar: string; location?: string | null; url?: string | null }
+export interface Finding { title: string; why: string; when: string; where: string; url: string; score: number; pushed?: boolean }
+export interface Briefing { mostImportant?: string; schedule?: { time: string; what: string; prep?: string }[]; reminders?: { title: string; list?: string; due?: string; priority?: string }[]; projectPulse?: { project: string; status: string; next: string }[] }
+export interface Today { date: string; briefing: Briefing | null; findings: Finding[] }
 
 async function getJSON<T>(path: string): Promise<T> {
   const r = await fetch('/api/' + path)
@@ -29,6 +32,7 @@ export const api = {
   wikiTree: () => getJSON<{ domains: WikiTreeDomain[] }>('wiki/tree'),
   wikiPage: (name: string) => getJSON<WikiPage>('wiki/page?name=' + encodeURIComponent(name)),
   profile: () => getJSON<{ priorities: string[] }>('profile'),
+  today: () => getJSON<Today>('today'),
   registry: () => getJSON<{ registry: RegistryEntry[] }>('registry'),
   config: () => getJSON<{ config: string }>('config'),
   doctor: () => getJSON<{ groups: DoctorGroup[] }>('doctor'),

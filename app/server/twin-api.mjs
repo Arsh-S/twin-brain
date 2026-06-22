@@ -192,6 +192,18 @@ async function setPriorities(p) {
   return { ok: true }
 }
 
+async function getToday() {
+  // The morning briefing job + the discovery scout write generated/today.json.
+  // Only surface it if it is from today (a stale day rolls over to an empty feed).
+  const empty = { date: '', briefing: null, findings: [] }
+  try {
+    const doc = JSON.parse(await readFile(join(REPO, 'generated', 'today.json'), 'utf8'))
+    const todayStr = new Date().toLocaleDateString('en-CA') // YYYY-MM-DD, local
+    if (doc.date !== todayStr) return { ...empty, date: todayStr }
+    return { date: doc.date, briefing: doc.briefing ?? null, findings: Array.isArray(doc.findings) ? doc.findings : [] }
+  } catch { return empty }
+}
+
 async function getRegistry() {
   try {
     const j = JSON.parse(await readFile(join(REPO, 'config', 'projects.json'), 'utf8'))
@@ -266,7 +278,7 @@ async function postRegistry(b) {
 const JOB_TIMEOUT = 300000 // 5 min for heavy headless-claude jobs
 async function postAsk(b) { const r = await twin('ask', String(b.q || '')); return { ok: r.ok, answer: (r.stdout || '').trim(), error: r.ok ? null : r.stderr.trim() } }
 async function postJob(name) {
-  const ok = ['ingest', 'tidy', 'lint', 'research', 'sync', 'agenda'].includes(name)
+  const ok = ['ingest', 'tidy', 'lint', 'research', 'sync', 'agenda', 'scout'].includes(name)
   if (!ok) return { ok: false, error: 'unknown job' }
   const r = await run(TWIN, [name], JOB_TIMEOUT)
   return { ok: r.ok, output: (r.stdout || '').trim(), error: r.ok ? null : (r.stderr || '').trim() }
@@ -290,6 +302,7 @@ export async function handle(req, res) {
         case 'wiki/tree': return json(await getWikiTree())
         case 'wiki/page': return json(await getWikiPage(q('name', '')))
         case 'profile': return json(await getProfile())
+        case 'today': return json(await getToday())
         case 'registry': return json(await getRegistry())
         case 'config': return json(await getConfig())
         case 'doctor': return json(await getDoctor())
