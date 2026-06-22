@@ -559,6 +559,35 @@ export default function App() {
                         </div>
                       )}
                     </div>
+
+                    {/* Worth your time — proactive scout findings (under the schedule) */}
+                    <div style={css('background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px 18px')}>
+                      <div style={css('display:flex;align-items:center;justify-content:space-between;margin-bottom:11px')}>
+                        <div style={css('font-family:var(--font-mono);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent)')}>Worth your time</div>
+                        <button className="hov-surface2" onClick={() => runMaint('scout')} style={css('display:inline-flex;align-items:center;gap:6px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 11px;font-size:11.5px;font-weight:600;cursor:pointer')}>🔭 Scout now</button>
+                      </div>
+                      {live.loading
+                        ? <Loading label="Loading findings…" pad={8} />
+                        : (live.today?.findings?.length ?? 0) === 0
+                          ? <div style={css('font-size:13px;color:var(--text-3)')}>Nothing surfaced yet. The scout runs each morning and Sunday; hit “Scout now” to look immediately.</div>
+                          : (
+                            <div style={css('display:flex;flex-direction:column;gap:13px')}>
+                              {[...(live.today?.findings ?? [])].sort((a, b) => (b.score || 0) - (a.score || 0)).map((f: Finding, i) => (
+                                <div key={i} style={css('display:flex;gap:11px;align-items:flex-start')}>
+                                  <span style={css(`width:7px;height:7px;border-radius:50%;margin-top:6px;flex:0 0 auto;background:${f.pushed ? 'var(--accent)' : 'var(--text-3)'}`)} />
+                                  <div style={css('flex:1;min-width:0')}>
+                                    <div style={css('font-size:14px;font-weight:600')}>{f.title}
+                                      {f.pushed ? <span style={css('margin-left:8px;font-family:var(--font-mono);font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--accent-fg);background:var(--accent);border-radius:100px;padding:1px 7px')}>pushed</span> : null}
+                                    </div>
+                                    {f.why ? <div style={css('font-size:12.5px;color:var(--text-2);margin-top:3px')}>{f.why}</div> : null}
+                                    <div style={css('font-size:11.5px;color:var(--text-3);margin-top:3px')}>{[f.when, f.where].filter(Boolean).join(' · ')}</div>
+                                    {f.url ? <a href={f.url} target="_blank" rel="noreferrer" style={css('font-family:var(--font-mono);font-size:11px;color:var(--accent);margin-top:2px;display:inline-block;overflow-wrap:anywhere')}>{f.url}</a> : null}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                    </div>
                   </div>
 
                   <div style={css('display:flex;flex-direction:column;gap:16px')}>
@@ -567,7 +596,7 @@ export default function App() {
                         <div style={css('font-family:var(--font-mono);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--text-3)')}>Open reminders</div>
                         <div style={css('font-size:11.5px;color:var(--text-3)')}>{vm.openCount} open</div>
                       </div>
-                      <div style={css('display:flex;flex-direction:column;gap:13px;max-height:300px;overflow-y:auto')}>
+                      <div style={css('display:flex;flex-direction:column;gap:13px;max-height:640px;overflow-y:auto')}>
                         {live.loading && <Loading label="Loading reminders…" pad={10} />}
                         {!live.loading && vm.reminderGroups.length === 0 && <div style={css('font-size:13px;color:var(--text-3)')}>No open reminders.</div>}
                         {vm.reminderGroups.map(g => (
@@ -586,50 +615,7 @@ export default function App() {
                         ))}
                       </div>
                     </div>
-
-                    <div style={css('background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px 18px')}>
-                      <div style={css('font-family:var(--font-mono);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--text-3);margin-bottom:11px')}>Project pulse</div>
-                      <div style={css('display:flex;flex-direction:column;gap:9px')}>
-                        {live.loading && <Loading label="Loading…" pad={8} />}
-                        {!live.loading && vm.pulse.length === 0 && <div style={css('font-size:12.5px;color:var(--text-3)')}>No project pages yet.</div>}
-                        {vm.pulse.map(p => (
-                          <div key={p.name} style={css('display:flex;align-items:flex-start;gap:9px;cursor:pointer')} onClick={() => selectPage(p.name)}>
-                            <span style={css(`width:7px;height:7px;border-radius:50%;margin-top:5px;flex:0 0 auto;background:${p.color}`)} />
-                            <div style={css('flex:1')}><span style={css('font-weight:600;font-size:13px')}>{p.name}</span> <span style={css('font-size:12.5px;color:var(--text-2)')}>— {p.note}</span></div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
                   </div>
-                </div>
-
-                {/* Worth your time — proactive scout findings */}
-                <div style={css('background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px 18px;margin-top:16px')}>
-                  <div style={css('display:flex;align-items:center;justify-content:space-between;margin-bottom:11px')}>
-                    <div style={css('font-family:var(--font-mono);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent)')}>Worth your time</div>
-                    <button className="hov-surface2" onClick={() => runMaint('scout')} style={css('display:inline-flex;align-items:center;gap:6px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 11px;font-size:11.5px;font-weight:600;cursor:pointer')}>🔭 Scout now</button>
-                  </div>
-                  {live.loading
-                    ? <Loading label="Loading findings…" pad={8} />
-                    : (live.today?.findings?.length ?? 0) === 0
-                      ? <div style={css('font-size:13px;color:var(--text-3)')}>Nothing surfaced yet. The scout runs each morning and Sunday; hit “Scout now” to look immediately.</div>
-                      : (
-                        <div style={css('display:flex;flex-direction:column;gap:13px')}>
-                          {[...(live.today?.findings ?? [])].sort((a, b) => (b.score || 0) - (a.score || 0)).map((f: Finding, i) => (
-                            <div key={i} style={css('display:flex;gap:11px;align-items:flex-start')}>
-                              <span style={css(`width:7px;height:7px;border-radius:50%;margin-top:6px;flex:0 0 auto;background:${f.pushed ? 'var(--accent)' : 'var(--text-3)'}`)} />
-                              <div style={css('flex:1;min-width:0')}>
-                                <div style={css('font-size:14px;font-weight:600')}>{f.title}
-                                  {f.pushed ? <span style={css('margin-left:8px;font-family:var(--font-mono);font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--accent-fg);background:var(--accent);border-radius:100px;padding:1px 7px')}>pushed</span> : null}
-                                </div>
-                                {f.why ? <div style={css('font-size:12.5px;color:var(--text-2);margin-top:3px')}>{f.why}</div> : null}
-                                <div style={css('font-size:11.5px;color:var(--text-3);margin-top:3px')}>{[f.when, f.where].filter(Boolean).join(' · ')}</div>
-                                {f.url ? <a href={f.url} target="_blank" rel="noreferrer" style={css('font-family:var(--font-mono);font-size:11px;color:var(--accent);margin-top:2px;display:inline-block;overflow-wrap:anywhere')}>{f.url}</a> : null}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
                 </div>
               </div>
             )}
