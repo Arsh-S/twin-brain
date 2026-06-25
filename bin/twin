@@ -378,6 +378,121 @@ cmd_weekly() { # deep: ingest, reconcile/health lint, soft-budgeted web research
   logline "weekly run finished"
 }
 
+cmd_onboard() { # guided first run: setup + a live capture->ingest->ask demo
+  local ok="  \033[32m✓\033[0m" bad="  \033[31m✗\033[0m" warn="  \033[33m!\033[0m"
+  local C_B="\033[1;34m" C_DIM="\033[2m" C_0="\033[0m"
+  printf "${C_B}Welcome to twin${C_0} — your second brain. Let's get you set up.\n\n"
+
+  # 1. quick health: the essentials must be present
+  echo "Checking your setup"
+  local missing=0
+  command -v claude  >/dev/null 2>&1 && printf "$ok claude CLI\n"   || { printf "$bad claude CLI not found — twin's engine (https://claude.com/product/claude-code)\n"; missing=1; }
+  command -v git     >/dev/null 2>&1 && printf "$ok git\n"          || { printf "$bad git not found\n"; missing=1; }
+  command -v python3 >/dev/null 2>&1 && printf "$ok python3\n"       || { printf "$bad python3 not found\n"; missing=1; }
+  [ "$missing" = "0" ] || { echo; die "install the missing tools above, then re-run: twin onboard"; }
+  printf "$ok vault at $TWIN_DIR\n\n"
+
+  # non-interactive (piped/CI): run a smoke-test round-trip instead of prompting
+  if [ ! -t 0 ]; then
+    echo "No terminal detected — running a non-interactive smoke test."
+    cmd_capture "twin onboarding smoke test: this fact was captured by 'twin onboard'." --source onboard >/dev/null
+    cmd_ingest >/dev/null 2>&1 || true
+    echo; echo "Asking the wiki to prove the round-trip worked:"
+    cmd_ask "what was captured during onboarding?" || true
+    echo; printf "${C_B}Smoke test done.${C_0} Run 'twin onboard' in a terminal for the guided setup, or 'twin doctor' to verify.\n"
+    return 0
+  fi
+
+  # 2. seed profile.md — only if it is still the untouched template (never clobber real content)
+  local profile="$WIKI/personal/profile.md"
+  if [ -f "$profile" ] && grep -q "_(your name)_" "$profile" 2>/dev/null; then
+    echo "A couple of questions so twin can personalize answers (Enter to skip any):"
+    local name role project
+    printf "  Your name? "        ; IFS= read -r name    || true
+    printf "  What do you do? "    ; IFS= read -r role    || true
+    printf "  Working on anything right now? "; IFS= read -r project || true
+    if [ -n "$name$role$project" ]; then
+      python3 - "$profile" "$name" "$role" "$project" "$(day)" <<'PY'
+import sys
+path,name,role,project,today=sys.argv[1:6]
+name=name or "_(your name)_"; role=role or "_(what you do)_"
+proj=project or "_(project — one line)_"
+prio=project or "_(your #1 focus right now)_"
+open(path,"w").write(f"""---
+domain: personal
+tags: [profile, identity, priorities]
+pinned: true
+---
+# Profile
+
+> The "who I am" context. ingest / ask / research read this FIRST so everything is personalized.
+> Keep it short and current. Edit `## Priorities now` whenever they change.
+
+## Identity
+- **Name:** {name}
+- **Location:** _(where you are)_
+- **Role:** {role}
+
+## Stack & how I work
+- _(tools you use, e.g. Claude Code, Obsidian, your OS)_
+- _(working preferences: tone, conventions, things to avoid)_
+
+## Active projects
+- {proj}
+
+## Priorities now
+<!-- EDIT THESE when they change — every workflow reads them. -->
+1. {prio}
+2. _(second)_
+3. _(third)_
+
+## Timeline
+- ({today}) profile created via `twin onboard`
+""")
+PY
+      printf "$ok saved to wiki/personal/profile.md\n"
+    fi
+    echo
+  fi
+
+  # 3. macOS Life-OS: trigger the EventKit permission prompt now so it's done before first use
+  if [ "$(uname)" = "Darwin" ] && command -v swift >/dev/null 2>&1; then
+    echo "Life-OS (calendar + reminders)"
+    if swift "$SELF/twin-rem.swift" list >/dev/null 2>&1; then
+      printf "$ok Reminders + Calendar access already granted\n"
+    else
+      printf "$warn macOS will now ask for Reminders/Calendar access — click Allow.\n"
+      swift "$SELF/twin-rem.swift" list >/dev/null 2>&1 || true
+      swift "$SELF/twin-cal.swift" 1   >/dev/null 2>&1 || true
+      printf "    (if you missed it: System Settings > Privacy & Security > Reminders/Calendars)\n"
+    fi
+    echo
+  fi
+
+  # 4. live demo — costs a little quota (your Claude subscription), so confirm first
+  printf "Want a 30-second live demo? twin will ${C_DIM}capture${C_0} a fact, ${C_DIM}ingest${C_0} it into\n"
+  printf "the wiki, then ${C_DIM}ask${C_0} about it — proving the loop end-to-end. [Y/n] "
+  local yn; IFS= read -r yn || true
+  case "${yn:-y}" in
+    [Nn]*) echo "Skipped the demo.";;
+    *)
+      local fact="${project:-I started using twin, a self-building second brain, today.}"
+      echo; printf "${C_B}1/3 capture${C_0}\n"; cmd_capture "$fact" --source onboard
+      printf "\n${C_B}2/3 ingest${C_0} ${C_DIM}(compiling into the wiki — this calls Claude)${C_0}\n"; cmd_ingest || true
+      printf "\n${C_B}3/3 ask${C_0}\n"; cmd_ask "what did I just capture during onboarding?" || true
+      ;;
+  esac
+
+  # 5. where to go next
+  printf "\n${C_B}You're set up.${C_0} Next:\n"
+  printf "  ${C_DIM}twin capture \"a thought\"${C_0}   drop anything into the inbox\n"
+  printf "  ${C_DIM}twin ask \"...\"${C_0}             ask your brain, with citations\n"
+  printf "  ${C_DIM}twin app${C_0}                    the web UI at http://localhost:5179\n"
+  printf "  ${C_DIM}twin doctor${C_0}                 verify everything any time\n"
+  printf "  Open ${C_DIM}$TWIN_DIR${C_0} in Obsidian (Open folder as vault) for the graph view.\n"
+  printf "  Keep it private: push the vault to a ${C_B}private${C_0} git remote, never a public one.\n"
+}
+
 cmd_doctor() { # health check: deps, permissions, schedule, hooks, sync
   local ok="  \033[32m✓\033[0m" bad="  \033[31m✗\033[0m" warn="  \033[33m!\033[0m"
   echo "twin doctor @ $TWIN_DIR"
@@ -442,6 +557,7 @@ usage() {
   cat <<'EOF'
 twin - your second brain (system: twin, instance: <your vault>)
 
+  twin onboard                     guided first run: setup + a live capture->ingest->ask demo
   twin capture "text"              quick-capture a thought to the inbox
   twin capture --file PATH         capture a file's contents
   echo x | twin capture --stdin    capture from a pipe
@@ -496,6 +612,7 @@ main() {
     sync)     cmd_sync "$@";;
     nightly)  cmd_nightly "$@";;
     weekly)   cmd_weekly "$@";;
+    onboard)  cmd_onboard "$@";;
     doctor)   cmd_doctor "$@";;
     app)      cmd_app "$@";;
     status)   cmd_status "$@";;
