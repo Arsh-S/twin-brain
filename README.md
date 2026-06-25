@@ -35,6 +35,7 @@ pattern, with [kepano/obsidian-skills](https://github.com/kepano/obsidian-skills
 - [Automation: nightly, weekly, and morning](#automation-nightly-weekly-and-morning)
 - [Running on your Claude subscription (no API tokens)](#running-on-your-claude-subscription-no-api-tokens)
 - [How it works](#how-it-works)
+- [Troubleshooting](#troubleshooting)
 - [Privacy](#privacy)
 - [License](#license)
 
@@ -68,21 +69,38 @@ on top of a **dated, append-only timeline** (so history stays auditable). Git is
 
 Requires [Claude Code](https://claude.com/product/claude-code), `git`, and `python3`. The web app
 and Life-OS features additionally want Node.js (`npm`) and, on macOS, the Xcode Command Line Tools
-(`swift`).
+(`swift`). macOS gets the full feature set; on Linux the CLI, wiki, and web app work, while the
+EventKit Life-OS features and the `launchd` schedule are skipped cleanly.
+
+**One line** (clones the framework into `~/twin-framework`, then installs):
 
 ```bash
-git clone https://github.com/Arsh-S/twin-brain.git
-cd twin-brain
+curl -fsSL https://raw.githubusercontent.com/Arsh-S/twin-brain/main/bootstrap.sh | bash
+```
+
+**Prefer to read the code first?** Clone and run the installer yourself:
+
+```bash
+git clone https://github.com/Arsh-S/twin-brain.git && cd twin-brain
 ./install.sh --with-skills        # add --dir PATH to choose where the brain lives (default ~/twin)
 ```
 
-This creates your vault, puts `twin` on your PATH, installs the Claude Code hooks, copies the web
-app and Swift helpers in, and schedules the nightly/weekly jobs (macOS). **Your knowledge lives in
-the vault, separate from this framework repo**, so you can keep it private.
+Either path creates your vault, puts `twin` on your PATH, installs the Claude Code hooks, copies in
+the web app and Swift helpers, and schedules the nightly/weekly jobs (macOS). It finishes by
+launching the guided first run. **Your knowledge lives in the vault, separate from this framework
+repo**, so you can keep it private.
+
+### Your first 5 minutes
+
+The installer ends by running `twin onboard` (run it yourself any time). It checks your setup,
+asks two quick questions to personalize your `profile.md`, requests calendar/reminders permission
+on macOS, and runs a live `capture → ingest → ask` demo so you watch the loop work end-to-end.
+Then `twin doctor` confirms everything is wired.
 
 ## The CLI
 
 ```bash
+twin onboard                            # guided first run: setup + a live capture->ingest->ask demo
 twin capture "a thought"                # drop into the inbox
 twin clip https://example.com/article   # web page -> clean markdown
 twin ingest                             # compile inbox + sessions into the wiki
@@ -195,6 +213,23 @@ capture --> raw-sources/ --> ingest (Claude) --> wiki/ --> ask / SessionStart re
 
 For a from-the-code walkthrough (engine, app API map, EventKit helpers, automation), see
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+## Troubleshooting
+
+`twin doctor` is the single health check: it verifies dependencies, PATH, the git remote, the
+scheduled jobs, the capture hooks, and (on macOS) calendar/reminders permission, printing ✓/!/✗ for
+each. Start there.
+
+| Symptom | Fix |
+|---|---|
+| `twin: command not found` | The installer couldn't find a writable PATH dir. Add `export PATH="$HOME/twin/bin:$PATH"` to your shell profile. |
+| `claude CLI not found` | twin's engine is missing — install [Claude Code](https://claude.com/product/claude-code) and log in, then re-run `twin onboard`. |
+| Calendar/reminders denied (macOS) | Grant your terminal app under System Settings → Privacy & Security → Reminders/Calendars, then `twin doctor` to confirm. |
+| Nightly/weekly jobs not running | macOS only; `launchctl list \| grep twin` should list them. Re-run `./install.sh` to reload. On Linux, add cron jobs for `twin nightly`/`twin weekly`/`twin morning`. |
+| `twin app` won't start | Needs Node.js (`npm`). First launch installs deps; re-run `twin app`. |
+| `twin search` returns little | Semantic search wants `qmd`; without it search falls back to grep. |
+
+Re-running `./install.sh` is safe — it's idempotent and never overwrites your vault content.
 
 ## Privacy
 
