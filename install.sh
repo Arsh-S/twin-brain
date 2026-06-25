@@ -24,9 +24,20 @@ done
 say() { printf '\033[1;34m::\033[0m %s\n' "$*"; }
 
 # --- 1. dependencies ---
-command -v claude >/dev/null 2>&1 || { echo "ERROR: Claude Code ('claude') not found. Install it first: https://claude.com/product/claude-code" >&2; exit 1; }
-command -v git    >/dev/null 2>&1 || { echo "ERROR: git not found." >&2; exit 1; }
-command -v python3 >/dev/null 2>&1 || { echo "ERROR: python3 not found." >&2; exit 1; }
+# Collect ALL missing required deps and report together (don't die on the first).
+missing=""
+command -v claude  >/dev/null 2>&1 || missing="$missing\n  - claude  (twin's engine)        https://claude.com/product/claude-code"
+command -v git     >/dev/null 2>&1 || missing="$missing\n  - git"
+command -v python3 >/dev/null 2>&1 || missing="$missing\n  - python3 (registry/status helpers)"
+if [ -n "$missing" ]; then
+  printf 'ERROR: install these required tools first, then re-run ./install.sh:%b\n' "$missing" >&2
+  exit 1
+fi
+# Optional deps: warn, never block. twin degrades gracefully without them.
+opt_missing=""
+command -v npm     >/dev/null 2>&1 || opt_missing="$opt_missing npm(web-app),"
+[ "$(uname)" = "Darwin" ] && { command -v swift >/dev/null 2>&1 || opt_missing="$opt_missing swift(calendar/reminders),"; }
+[ -n "$opt_missing" ] && say "optional tools missing (features degrade gracefully):${opt_missing%,}"
 
 # --- 2. vault scaffold ---
 say "Creating vault at $TWIN_DIR"
@@ -201,13 +212,21 @@ cat <<EOF
 
   vault : $TWIN_DIR
   cli   : twin help
+EOF
 
-Try it:
-  twin capture "twin is my new second brain"
-  twin ingest
-  twin ask "what do I know about twin?"
-  twin app        # optional: the local web UI at http://localhost:5179
+# Hand off to the guided first run. Interactive terminal -> launch it now;
+# piped/CI -> just point at it so the install stays non-blocking.
+TWIN_CLI="${BINDIR:+$BINDIR/twin}"; TWIN_CLI="${TWIN_CLI:-$TWIN_DIR/bin/twin}"
+if [ -t 0 ] && [ -t 1 ]; then
+  echo
+  TWIN_DIR="$TWIN_DIR" "$TWIN_CLI" onboard || true
+else
+  cat <<EOF
+
+Next: run the guided first-run setup + live demo:
+  twin onboard
 
 Make it yours: open $TWIN_DIR in Obsidian (Open folder as vault) for the graph view.
 Keep your data PRIVATE: push $TWIN_DIR to a private repo, not a public one.
 EOF
+fi
