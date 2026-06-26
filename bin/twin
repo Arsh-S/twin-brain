@@ -543,6 +543,31 @@ cmd_app() { # launch the local web UI (the Vite dev server doubles as the API)
   ( cd "$appdir" && exec npm run dev )
 }
 
+cmd_bar() { # menu bar app (macOS): build / manage TwinBar.app, a login-agent companion
+  [ "$(uname)" = "Darwin" ] || die "twin bar is macOS-only"
+  local label="com.twin.bar" uid; uid="$(id -u)"
+  local plist="$HOME/Library/LaunchAgents/$label.plist"
+  case "${1:-status}" in
+    build|rebuild|install)
+      [ -f "$SELF/build-twin-bar.sh" ] || die "missing $SELF/build-twin-bar.sh (re-run install.sh)"
+      command -v swiftc >/dev/null 2>&1 || die "twin bar needs swift (Xcode command line tools)"
+      TWIN_DIR="$TWIN_DIR" bash "$SELF/build-twin-bar.sh";;
+    restart) launchctl kickstart -k "gui/$uid/$label" && echo "twin bar restarted";;
+    stop)
+      launchctl bootout "gui/$uid/$label" 2>/dev/null || true
+      pkill -f "TwinBar.app/Contents/MacOS/TwinBar" 2>/dev/null || true
+      echo "twin bar stopped (won't relaunch until 'twin bar build')";;
+    start|load)
+      [ -f "$plist" ] || die "not installed — run 'twin bar build'"
+      launchctl bootstrap "gui/$uid" "$plist" 2>/dev/null || launchctl kickstart -k "gui/$uid/$label"
+      echo "twin bar started";;
+    status|*)
+      if pgrep -f "TwinBar.app/Contents/MacOS/TwinBar" >/dev/null; then echo "twin bar: running (menu bar)"
+      elif [ -d "$SELF/TwinBar.app" ]; then echo "twin bar: built, not running ('twin bar start')"
+      else echo "twin bar: not built ('twin bar build')"; fi;;
+  esac
+}
+
 cmd_status() {
   echo "twin @ $TWIN_DIR"
   echo "  inbox unprocessed : $(find "$INBOX" -name '*.md' 2>/dev/null | wc -l | tr -d ' ')"
@@ -583,6 +608,7 @@ twin - your second brain (system: twin, instance: <your vault>)
   twin weekly                      ingest + lint + research + scout + tidy + sync  [deep, scheduled]
   twin doctor                      health check: deps, permissions, schedule, sync
   twin app                         launch the local web UI (http://localhost:5179)
+  twin bar [build|restart|stop]    macOS menu bar app (quick capture, voice notes, ask)
   twin status                      show brain stats
 EOF
 }
@@ -615,6 +641,7 @@ main() {
     onboard)  cmd_onboard "$@";;
     doctor)   cmd_doctor "$@";;
     app)      cmd_app "$@";;
+    bar)      cmd_bar "$@";;
     status)   cmd_status "$@";;
     help|-h|--help) usage;;
     *) usage; die "unknown command: $cmd";;
