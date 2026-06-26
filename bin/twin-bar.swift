@@ -27,6 +27,8 @@ enum Cfg {
     static let inbox = "\(repo)/raw-sources/inbox"
     static let dashboard = "http://localhost:5179"
     static let version = "1.0"
+    // Shown under the title — the vault folder name (e.g. "twin").
+    static let instance = (repo as NSString).lastPathComponent
 
     // Common bin dirs the CLI's children (claude, node, git, swift) need. We run via a
     // login shell (`zsh -lc`) which re-sources the user's profile, so version-managed
@@ -390,7 +392,7 @@ struct PanelView: View {
                 .foregroundStyle(LinearGradient(colors: [.purple, .pink], startPoint: .top, endPoint: .bottom))
             VStack(alignment: .leading, spacing: 0) {
                 Text("twin").font(.system(size: 15, weight: .bold, design: .rounded))
-                Text("arsh-twin").font(.system(size: 9)).foregroundStyle(.secondary)
+                Text(Cfg.instance).font(.system(size: 9)).foregroundStyle(.secondary)
             }
             Spacer()
             if st.busy {
