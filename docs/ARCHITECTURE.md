@@ -90,6 +90,21 @@ Representative endpoints:
 The UI has eight screens (Today, Capture, Ask, Wiki, Tasks, Calendar, Maintain, Settings) reachable
 with Option + 1 to 8, with light/dark and editorial/console themes.
 
+## The menu bar app
+
+`bin/twin-bar.swift` is a native SwiftUI **MenuBarExtra** app (macOS). `bin/build-twin-bar.sh`
+compiles it (`swiftc -parse-as-library`), assembles `bin/TwinBar.app`, ad-hoc signs it, and installs
+a `com.twin.bar` login agent (`RunAtLoad` + `KeepAlive`). It is an `LSUIElement` agent: menu bar
+only, no Dock or app switcher, restored after every reboot. The built bundle is gitignored; you
+produce it locally with `twin bar build`.
+
+Like the web app, it owns no logic of its own — it shells to the `twin` CLI through a
+`zsh -lc 'exec "$0" "$@"'` bridge (argv array, so capture text needs no escaping). Quick capture,
+clipboard capture, ask, and the maintenance jobs all map to existing CLI commands. Voice notes are
+the one extra: `AVAudioRecorder` writes an `.m4a` to the inbox, `SFSpeechRecognizer` transcribes it
+**on-device**, and the transcript is captured via `twin capture` with the audio linked. The bundle's
+`Info.plist` carries the Microphone and Speech usage strings so the TCC grants attach to the app.
+
 ## Automation
 
 Two `launchd` jobs (cron elsewhere) keep the brain current:
@@ -123,6 +138,7 @@ search, then plain keyword search, then `grep` when neither qmd nor an embedding
 
 ```
 bin/        twin CLI + Swift EventKit helpers (twin-cal, twin-cal-json, twin-rem)
+            + the menu bar app source (twin-bar.swift) and its build script
 skills/     prompts for ingest / ask / lint / tidy / research / agenda
 templates/  CLAUDE.md, twin.config.json, profile.md, launchd plists, the global snippet
 hooks/      SessionStart (recall) + SessionEnd (capture) scripts
