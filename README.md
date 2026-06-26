@@ -31,6 +31,7 @@ pattern, with [kepano/obsidian-skills](https://github.com/kepano/obsidian-skills
 - [Quick start](#quick-start)
 - [The CLI](#the-cli)
 - [The web app](#the-web-app)
+- [The menu bar app](#the-menu-bar-app)
 - [Life-OS: calendar and reminders](#life-os-calendar-and-reminders)
 - [Automation: nightly, weekly, and morning](#automation-nightly-weekly-and-morning)
 - [Running on your Claude subscription (no API tokens)](#running-on-your-claude-subscription-no-api-tokens)
@@ -59,6 +60,7 @@ on top of a **dated, append-only timeline** (so history stays auditable). Git is
 | **Compiled truth + timeline** | Current best understanding plus the dated history of how it was learned, on every page. |
 | **Maps of Content** | Pages auto-sort into navigation hubs that scale to thousands of notes. |
 | **Live web app** | A local React UI over the real vault: Today briefing, Capture, Ask, Wiki reader, Tasks, Calendar, Maintain, Settings. |
+| **Menu bar app** | A native macOS menu bar companion (`twin bar`): quick capture, on-device voice notes, ask, and one-tap jobs, always a click away. |
 | **Life-OS** | Read and write Apple Reminders and read all your Apple Calendars via EventKit, with a daily briefing. |
 | **Hybrid search** | `twin search` runs semantic (vector) + keyword search via qmd, falling back to grep. |
 | **Web research** | `twin clip <url>` pulls clean Markdown (defuddle); the weekly pass fills knowledge gaps from the web, cited. |
@@ -114,6 +116,7 @@ twin remind "call the dentist" --due "June 20, 2026 9:00 AM"   # Apple Reminder
 twin agenda                             # briefing: calendar + reminders + priorities
 twin morning                            # daily 08:00 job: briefing + triage + scout peek + sync
 twin app                                # launch the web UI (http://localhost:5179)
+twin bar build                          # macOS: menu bar app (quick capture, voice notes, ask)
 twin doctor                             # health check: deps, permissions, schedule, sync
 twin status
 ```
@@ -146,6 +149,30 @@ Eight screens, reachable with **Option + 1 to 8**:
 - **Calendar** — every Apple Calendar account in a 7-day strip with a grouped agenda.
 - **Maintain** — run ingest / tidy / lint / research / sync / agenda, with a `twin doctor` health table.
 - **Settings** — light/dark and editorial/console themes, plus the per-project capture-policy registry.
+
+## The menu bar app
+
+On macOS, `twin bar build` compiles a native SwiftUI menu bar companion — **TwinBar.app** — and
+installs it as a login agent so a brain icon is always one click away. It is an `LSUIElement` agent:
+it lives only in the menu bar, never the Dock or app switcher, and comes back after every reboot.
+
+From the icon you get a polished popover with:
+
+- **Quick capture** — a text box that files straight to the inbox (`⌘↩`), plus a one-tap "capture the clipboard".
+- **Voice notes** — record, transcribe **on-device** (`SFSpeechRecognizer`), and capture the text; the audio is archived to the inbox.
+- **Ask twin** — type a question, get the cited answer inline.
+- **One-tap jobs** — ingest, sync, agenda, scout, tidy, nightly.
+- **Live status** — inbox / chats / pages / tracked counts, and a button to open the dashboard or reveal the inbox.
+
+It drives the same `twin` CLI as everything else (no private API), so it stays correct as the CLI
+evolves. Voice notes prompt once for Microphone and Speech Recognition access.
+
+```bash
+twin bar build      # compile, sign, install the login agent, and launch it
+twin bar status     # running / built / not built
+twin bar restart    # rebuild-free relaunch
+twin bar stop       # quit and stop relaunching (until the next `twin bar build`)
+```
 
 ## Life-OS: calendar and reminders
 
