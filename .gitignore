@@ -10,3 +10,6 @@ app/dist/
 app/.vite/
 app/tsconfig.tsbuildinfo
 __pycache__/
+
+# menu bar app: built/signed bundle (compile locally with `twin bar build`)
+bin/TwinBar.app/
