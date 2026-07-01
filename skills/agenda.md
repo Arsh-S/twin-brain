@@ -11,6 +11,11 @@ conventions. Be concise. This runs automatically each morning (and on demand).
 3. **Open reminders:** run `twin reminders` via Bash (EventKit; falls back to osascript). If it
    reports a permissions error, note that and continue.
 4. **Project pulse:** skim the active-project pages named in the profile for current status.
+5. **Physical state:** run `twin health coach` via Bash. It returns
+   `{"line": "...", "signals": [...]}` computed deterministically from Apple Health
+   (no fabrication — trust these numbers). If `signals` is non-empty, you will surface
+   ONE coaching line (see Produce). If it's empty, say nothing about health — do not
+   invent a physical-state observation.
 
 ## Triage (the "manage my day" part)
 - Rank the open reminders against `## Priorities now`: what is overdue, due today, or
@@ -27,6 +32,10 @@ A briefing under ~250 words, in this shape:
 - **SCHEDULE** — today's events, one line each (time + what + a one-line prep note if useful).
 - **OPEN REMINDERS** — the open reminders, triaged/prioritized (overdue + due-today first).
 - **PROJECT PULSE** — one line per active project: status + next action.
+- **PHYSICAL STATE** — include this line ONLY if `twin health coach` returned signals.
+  Take the top signal's `line` and, if useful, tie it to today's schedule (e.g. fit a
+  walk around a fixed block). One line, actionable, kind. Omit the section entirely when
+  there are no signals. This is a *suggestion*, same as the rest — never a command.
 
 ## Write outputs (two places)
 1. **Human-readable:** save the markdown briefing to `generated/<YYYY-MM-DD>-agenda.md` (an output,
@@ -38,7 +47,8 @@ A briefing under ~250 words, in this shape:
      "mostImportant": "<one line>",
      "schedule":      [{"time":"09:00","what":"…","prep":"…"}],
      "reminders":     [{"title":"…","list":"…","due":"…","priority":"high"}],
-     "projectPulse":  [{"project":"…","status":"…","next":"…"}]
+     "projectPulse":  [{"project":"…","status":"…","next":"…"}],
+     "health":        "<the physical-state coaching line, or omit the key if no signals>"
    }' | python3 bin/twin-today.py merge-briefing
    ```
    This preserves any scout `findings` already in the file (merge, not clobber).
@@ -48,8 +58,10 @@ If a notification script is configured (e.g. `~/.claude/scripts/telegram-notify.
 message — the briefing TL;DR — via Bash:
 ```bash
 ~/.claude/scripts/telegram-notify.sh "☀️ Today: <most-important action>
-<N> reminders open (<M> due today). <one-line schedule headline>."
+<N> reminders open (<M> due today). <one-line schedule headline>.
+<if health signals: 🫀 <the coaching line>>"
 ```
+Include the 🫀 health line only when `twin health coach` returned signals; otherwise leave it out.
 Keep it to a few lines. This is the single morning ping; do not send more. If no notify script is
 configured, skip this step — the briefing still lands in the app and `generated/`.
 

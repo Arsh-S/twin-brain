@@ -115,6 +115,8 @@ twin scout                              # proactive web discovery -> "Worth your
 twin remind "call the dentist" --due "June 20, 2026 9:00 AM"   # Apple Reminder
 twin agenda                             # briefing: calendar + reminders + priorities
 twin morning                            # daily 08:00 job: briefing + triage + scout peek + sync
+twin health ingest                      # ingest Apple Health export -> physical-state page (deterministic)
+twin health coach                       # deterministic coaching signals from your health data
 twin app                                # launch the web UI (http://localhost:5179)
 twin bar build                          # macOS: menu bar app (quick capture, voice notes, ask)
 twin doctor                             # health check: deps, permissions, schedule, sync

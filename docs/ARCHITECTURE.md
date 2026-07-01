@@ -69,6 +69,26 @@ reaches every account with no per-account OAuth and never launches the Calendar 
 Calendar writes are optional and go through a calendar MCP to a single calendar you designate in
 `twin.config.json`.
 
+## Physical state via Apple Health
+
+twin factors your body into the day, not just your notes. HealthKit is iOS/watchOS-only (no macOS
+framework), so twin reads exports rather than the live store: the [Health Auto Export] app writes a
+daily JSON of whatever HealthKit metrics you choose into an iCloud folder that syncs to the Mac.
+
+- `bin/twin-health.py` is a **deterministic, stdlib-only** normalizer — no LLM ever touches the
+  numbers, so nothing is fabricated. It aggregates each day's intraday samples (sum / average /
+  latest / sleep-stage), writes an immutable per-day record to `raw-sources/health/`, and compiles
+  `wiki/personal/health.md` (baselines, trends, timeline, and deterministic patterns).
+- It is **metric-agnostic and nothing is required**: it keys off each metric's name, skips absent
+  ones, and stores unknown metrics generically. Works with an iPhone alone; gains sleep/HRV/recovery
+  automatically if an Apple Watch ever adds them — no code change.
+- `twin health ingest|import <zip>|status|coach`. `ingest` folds into `twin nightly` and `twin
+  morning`. `coach` emits deterministic coaching *signals* (e.g. yesterday's activity vs baseline,
+  short sleep, under-recovery) that the agenda skill phrases into one kind, actionable line in the
+  morning briefing — a suggestion, never an automatic action.
+
+[Health Auto Export]: https://apps.apple.com/us/app/health-auto-export-json-csv/id1115567069
+
 ## The web app
 
 `app/` is a React + TypeScript front-end (Vite). Because a browser cannot run EventKit, Swift, or

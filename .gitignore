@@ -13,3 +13,7 @@ __pycache__/
 
 # menu bar app: built/signed bundle (compile locally with `twin bar build`)
 bin/TwinBar.app/
+
+# python bytecode
+bin/__pycache__/
+__pycache__/

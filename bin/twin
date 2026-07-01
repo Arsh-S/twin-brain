@@ -250,6 +250,7 @@ cmd_morning() { # daily 08:00 job: briefing + triage, light scout peek, write to
     return 0
   fi
   logline "morning run started"
+  cmd_health ingest || true   # fresh physical-state data before the briefing coaches on it
   cmd_agenda || true
   cmd_scout --daily || true
   cmd_sync -m "twin: morning $(day)" || true
@@ -344,6 +345,7 @@ cmd_nightly() { # cheap: ingest new, tidy ONLY if something changed, sync. near-
   fi
   logline "nightly run started"
   cmd_ingest --all || true
+  cmd_health ingest || true
   if wiki_dirty; then
     cmd_tidy || true
   else
@@ -578,6 +580,19 @@ cmd_status() {
   grep "^## \[" "$LOG" 2>/dev/null | tail -3 | sed 's/^/    /' || true
 }
 
+cmd_health() { # Apple Health ingest/import/status (deterministic Python, no LLM)
+  local py="$SELF/twin-health.py"
+  [ -f "$py" ] || die "missing $py"
+  case "${1:-status}" in
+    ingest) logline "health ingest"; TWIN_DIR="$TWIN_DIR" python3 "$py" ingest;;
+    import) shift; [ -n "${1:-}" ] || die "usage: twin health import <export.zip>"
+            logline "health import $1"; TWIN_DIR="$TWIN_DIR" python3 "$py" import "$1";;
+    status) TWIN_DIR="$TWIN_DIR" python3 "$py" status;;
+    coach)  TWIN_DIR="$TWIN_DIR" python3 "$py" coach;;
+    *) die "usage: twin health [ingest|import <zip>|status|coach]";;
+  esac
+}
+
 usage() {
   cat <<'EOF'
 twin - your second brain (system: twin, instance: <your vault>)
@@ -607,6 +622,7 @@ twin - your second brain (system: twin, instance: <your vault>)
   twin nightly                     ingest + (conditional) tidy + sync  [cheap, scheduled]
   twin weekly                      ingest + lint + research + scout + tidy + sync  [deep, scheduled]
   twin doctor                      health check: deps, permissions, schedule, sync
+  twin health [ingest|import ZIP|status|coach]  ingest Apple Health export -> wiki (deterministic)
   twin app                         launch the local web UI (http://localhost:5179)
   twin bar [build|restart|stop]    macOS menu bar app (quick capture, voice notes, ask)
   twin status                      show brain stats
@@ -640,6 +656,7 @@ main() {
     weekly)   cmd_weekly "$@";;
     onboard)  cmd_onboard "$@";;
     doctor)   cmd_doctor "$@";;
+    health)   cmd_health "$@";;
     app)      cmd_app "$@";;
     bar)      cmd_bar "$@";;
     status)   cmd_status "$@";;
